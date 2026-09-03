@@ -199,6 +199,38 @@ deliberadamente separados porque llevan su propio validador pesado
 (mínimo 20 ítems, textos continuos/discontinuos/mixtos, regeneración
 automática si falla) que no quise mezclar con el generador de clases.
 
+## VALIDACIÓN EN SUPABASE REAL ✅ (este chat, vía conector MCP)
+Proyecto de Supabase creado por ti (`aula360`, ID `hmazqbwqodbiyburvczn`,
+región us-east-1), **separado del de LlévameQ**. Confirmaste que estaba
+vacío, lo verifiqué yo mismo antes de tocar nada (`list_tables` → 0
+tablas), y corrí las 8 migraciones directamente contra ese proyecto.
+
+**Bugs reales encontrados y corregidos** (esto es exactamente por lo que
+valía la pena probar antes de seguir a Fase 5):
+- 🔴 **Migración 006**: 4 tablas (`docentes`, `rectores`, `auditoria`,
+  `asignaturas`) quedaron con RLS activado pero **sin ninguna política**
+  — Postgres bloquea todo acceso por defecto en ese caso, ni el dueño
+  legítimo podía leer su propia fila. Corregido.
+- 🟡 **Migración 007**: todas las políticas RLS reescritas envolviendo
+  `auth.uid()` en `(select auth.uid())` (evita reevaluación por fila,
+  recomendación oficial de Supabase) + índices en columnas de llave
+  foránea que faltaban.
+- 🟡 **Migración 008**: índice faltante en `estudiantes.grado_id`.
+
+Después de estas 3 migraciones de corrección: **0 alertas de seguridad**,
+solo quedan avisos INFO de "índice sin usar" (esperado, no hay datos
+todavía) y WARN de "múltiples políticas permisivas" (correcto
+funcionalmente — cada rol tiene su propia política — es una
+optimización menor, no un bug).
+
+### Pendiente de tu parte para terminar de conectar
+1. En tu proyecto Supabase → Settings → API: copia la Project URL y la
+   anon key a tu `.env.local`.
+2. `npm install` y `npm run dev` — ya no hace falta correr SQL a mano,
+   las 8 migraciones ya están aplicadas en tu base real.
+3. Crea tu primer usuario superadmin (Authentication → Add user, luego
+   insertar su fila en `perfiles` con `rol='superadmin'`).
+
 ## FASE 5 — Próxima (pendiente, no iniciada)
 Exámenes tipo ICFES (3 versiones + examen macro), validador automático,
 banco de preguntas, diseño de ítems inspirado en IRT.

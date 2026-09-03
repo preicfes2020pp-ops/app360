@@ -35,9 +35,7 @@ export default async function EstudiantesRector() {
                 <tr key={e.id} className="border-t">
                   <td className="p-3">{e.nombre_completo}</td>
                   <td className="p-3">{e.numero_documento ?? "—"}</td>
-                  {/* @ts-expect-error -- relación anidada de Supabase */}
                   <td className="p-3">{e.grados?.nombre ?? "—"}</td>
-                  {/* @ts-expect-error -- relación anidada de Supabase */}
                   <td className="p-3">{e.grupos?.nombre ?? "—"}</td>
                 </tr>
               ))}

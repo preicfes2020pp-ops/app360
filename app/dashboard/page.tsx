@@ -69,13 +69,9 @@ export default async function DashboardDocente() {
                 <tbody>
                   {(asignaciones ?? []).map((a) => (
                     <tr key={a.id} className="border-t">
-                      {/* @ts-expect-error -- relaciones anidadas de Supabase */}
                       <td className="p-3">{a.grados?.nombre}</td>
-                      {/* @ts-expect-error -- relaciones anidadas de Supabase */}
                       <td className="p-3">{a.grupos?.nombre}</td>
-                      {/* @ts-expect-error -- relaciones anidadas de Supabase */}
                       <td className="p-3">{a.areas?.nombre}</td>
-                      {/* @ts-expect-error -- relaciones anidadas de Supabase */}
                       <td className="p-3">{a.asignaturas?.nombre}</td>
                     </tr>
                   ))}

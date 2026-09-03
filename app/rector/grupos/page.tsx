@@ -31,7 +31,6 @@ export default async function GruposRector() {
             <tbody>
               {(grupos ?? []).map((g) => (
                 <tr key={g.id} className="border-t">
-                  {/* @ts-expect-error -- relación anidada de Supabase */}
                   <td className="p-3">{g.grados?.nombre}</td>
                   <td className="p-3 font-medium">{g.nombre}</td>
                   <td className="p-3">{g.jornada}</td>

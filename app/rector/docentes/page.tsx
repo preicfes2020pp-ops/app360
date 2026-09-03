@@ -31,7 +31,6 @@ export default async function DocentesRector() {
                 <tr key={d.id} className="border-t">
                   <td className="p-3 font-medium">{d.nombre_completo}</td>
                   <td className="p-3">{d.correo}</td>
-                  {/* @ts-expect-error -- relación anidada de Supabase */}
                   <td className="p-3">{d.docentes?.area_principal ?? "—"}</td>
                   <td className="p-3 font-mono text-xs">{d.codigo_aula360}</td>
                 </tr>

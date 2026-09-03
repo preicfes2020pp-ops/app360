@@ -35,9 +35,7 @@ export default async function PlanDeAreaDocente() {
             <tbody>
               {(planes ?? []).map((p) => (
                 <tr key={p.id} className="border-t">
-                  {/* @ts-expect-error -- relaciones anidadas de Supabase */}
                   <td className="p-3">{p.areas?.nombre}</td>
-                  {/* @ts-expect-error -- relaciones anidadas de Supabase */}
                   <td className="p-3">{p.grados?.nombre}</td>
                   <td className="p-3">{p.periodo}</td>
                   <td className="p-3">{p.archivo_nombre ?? "—"}</td>

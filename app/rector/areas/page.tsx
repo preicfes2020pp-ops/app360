@@ -28,11 +28,9 @@ export default async function AreasRector() {
             <div key={a.id} className="p-4">
               <p className="font-semibold text-sm">{a.nombre}</p>
               <div className="flex flex-wrap gap-2 mt-2">
-                {/* @ts-expect-error -- relación anidada de Supabase */}
-                {(a.asignaturas ?? []).map((s) => (
+                {(a.asignaturas ?? []).map((s: any) => (
                   <span key={s.id} className="text-xs bg-gray-100 rounded-full px-3 py-1">{s.nombre}</span>
                 ))}
-                {/* @ts-expect-error -- relación anidada de Supabase */}
                 {(a.asignaturas ?? []).length === 0 && <span className="text-xs text-gray-400">Sin asignaturas todavía</span>}
               </div>
             </div>
