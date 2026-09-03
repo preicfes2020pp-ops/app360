@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+/*
+  Paleta AULA360 — extraída del logo oficial:
+  azul institucional (libro/birrete), verde (crecimiento/360°), dorado (borla).
+*/
+:root {
+  --a360-azul-oscuro: #0b2447;
+  --a360-azul: #1868c4;
+  --a360-azul-claro: #2f9ee0;
+  --a360-verde: #2fae60;
+  --a360-verde-claro: #6fd48f;
+  --a360-dorado: #f0a500;
+  --a360-fondo: #f5f7fb;
+  --a360-texto: #0b2447;
+}
+
+body {
+  background: var(--a360-fondo);
+  color: var(--a360-texto);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.a360-gradiente {
+  background: linear-gradient(135deg, var(--a360-azul) 0%, var(--a360-verde) 100%);
+}
