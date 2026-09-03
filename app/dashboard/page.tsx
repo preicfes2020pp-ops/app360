@@ -16,10 +16,11 @@ export default async function DashboardDocente() {
 
   if (!perfil || perfil.rol !== "docente") redirect("/login");
 
-  const { data: asignaciones, count: totalGrupos } = await supabase
+  const { data: asignacionesRaw, count: totalGrupos } = await supabase
     .from("asignaciones_docente")
     .select("id, grados(nombre), grupos(nombre), areas(nombre), asignaturas(nombre)", { count: "exact" })
     .eq("docente_id", user.id);
+  const asignaciones: any[] = asignacionesRaw ?? [];
 
   return (
     <div className="flex">
@@ -67,7 +68,7 @@ export default async function DashboardDocente() {
                   <tr><th className="p-3">Grado</th><th className="p-3">Grupo</th><th className="p-3">Área</th><th className="p-3">Asignatura</th></tr>
                 </thead>
                 <tbody>
-                  {(asignaciones ?? []).map((a) => (
+                  {asignaciones.map((a) => (
                     <tr key={a.id} className="border-t">
                       <td className="p-3">{a.grados?.nombre}</td>
                       <td className="p-3">{a.grupos?.nombre}</td>

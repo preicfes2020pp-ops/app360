@@ -33,7 +33,7 @@ export default async function PlanDeAreaDocente() {
               <tr><th className="p-3">Área</th><th className="p-3">Grado</th><th className="p-3">Periodo</th><th className="p-3">Archivo</th><th className="p-3">Estado</th></tr>
             </thead>
             <tbody>
-              {(planes ?? []).map((p) => (
+              {((planes ?? []) as any[]).map((p) => (
                 <tr key={p.id} className="border-t">
                   <td className="p-3">{p.areas?.nombre}</td>
                   <td className="p-3">{p.grados?.nombre}</td>

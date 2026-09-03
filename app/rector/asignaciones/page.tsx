@@ -48,7 +48,7 @@ export default async function AsignacionesRector() {
               <tr><th className="p-3">Docente</th><th className="p-3">Grado</th><th className="p-3">Grupo</th><th className="p-3">Área</th><th className="p-3">Asignatura</th></tr>
             </thead>
             <tbody>
-              {(asignaciones ?? []).map((a) => (
+              {((asignaciones ?? []) as any[]).map((a) => (
                 <tr key={a.id} className="border-t">
                   <td className="p-3 font-medium">{a.perfiles?.nombre_completo}</td>
                   <td className="p-3">{a.grados?.nombre}</td>

@@ -31,7 +31,7 @@ export default async function EstudiantesRector() {
               <tr><th className="p-3">Nombre</th><th className="p-3">Documento</th><th className="p-3">Grado</th><th className="p-3">Grupo</th></tr>
             </thead>
             <tbody>
-              {(estudiantes ?? []).map((e) => (
+              {((estudiantes ?? []) as any[]).map((e) => (
                 <tr key={e.id} className="border-t">
                   <td className="p-3">{e.nombre_completo}</td>
                   <td className="p-3">{e.numero_documento ?? "—"}</td>

@@ -29,7 +29,7 @@ export default async function GruposRector() {
               <tr><th className="p-3">Grado</th><th className="p-3">Grupo</th><th className="p-3">Jornada</th><th className="p-3">Año</th><th className="p-3">Código</th></tr>
             </thead>
             <tbody>
-              {(grupos ?? []).map((g) => (
+              {((grupos ?? []) as any[]).map((g) => (
                 <tr key={g.id} className="border-t">
                   <td className="p-3">{g.grados?.nombre}</td>
                   <td className="p-3 font-medium">{g.nombre}</td>
