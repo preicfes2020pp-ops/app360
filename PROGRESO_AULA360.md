@@ -231,21 +231,324 @@ optimización menor, no un bug).
 3. Crea tu primer usuario superadmin (Authentication → Add user, luego
    insertar su fila en `perfiles` con `rol='superadmin'`).
 
-## FASE 5 — Próxima (pendiente, no iniciada)
-Exámenes tipo ICFES (3 versiones + examen macro), validador automático,
-banco de preguntas, diseño de ítems inspirado en IRT.
+## ⚠️ HALLAZGO IMPORTANTE (otro chat/sesión avanzó el proyecto en paralelo)
+Al conectar el MCP de Supabase en este chat para probar, la base de datos
+real ya tenía **15 migraciones aplicadas** (nosotros solo conocíamos hasta
+la 008). Otra sesión — probablemente Claude Code corriendo directo en el
+computador del usuario — siguió construyendo directo contra Supabase
+(y probablemente editando el código localmente), sin generar nunca un zip
+que el usuario tuviera a mano. Se revisaron los 3 zips que el usuario sí
+tenía guardados (`AULA360_Fase4`, `AULA360_fix2`, `AULA360_fix_build`) y
+ninguno pasa de la migración 008 — es decir, **el código de esa sesión
+paralela nunca llegó a un zip**, solo quedó (probablemente) en un
+computador o carpeta que el usuario no ubicó.
+
+Buenas noticias: las migraciones 001-008 (Fases 0-4) coinciden EXACTO
+entre `fix2` y la base real — ese código sigue siendo válido y es la base
+de este mismo zip. Lo que cambió fue el diseño de Exámenes (Fase 5) y se
+agregaron features nuevas que este chat no conocía:
+- `009_fix_recursion_rls_perfiles` / `010_mover_funciones_a_esquema_privado`:
+  arreglos de RLS (funciones `privado.institucion_de()` / `privado.rol_de()`
+  para evitar recursión — mejor que el patrón que usábamos antes).
+- `011_examenes_icfes`: arquitectura **relacional**, no la que yo había
+  construido antes. Banco de preguntas real (`preguntas`, con columnas
+  `irt_dificultad`/`irt_discriminacion`/`irt_adivinacion` ya previstas
+  para calibración IRT futura), examen (`examenes`) y su enlace ordenado
+  (`examen_preguntas`). Cada versión (A/B/C) es una fila separada en
+  `examenes` que comparte `tema` + `asignacion_id`.
+- `012_horarios` / `013_horas_semanales_asignacion`: sistema de horarios
+  (`franjas_horarias`, `horario_clases`, `horarios_emergentes`,
+  `horario_emergente_clases`) — **sin código de UI conocido, pendiente**.
+- `014_temas_extraidos_plan_area`: extracción de temas estructurados del
+  plan de área (`area_plan_temas`) — **sin código de UI conocido, pendiente**.
+- `015_formato_dia_a_dia`: plantilla de formato subida por el docente
+  para el día a día (`formatos_dia_a_dia`) — **sin código de UI conocido,
+  pendiente**.
+
+## FASE 5 — Exámenes tipo ICFES ✅ RECONSTRUIDA en este chat (esquema real)
+Reconstruida desde cero contra las tablas reales `preguntas` /
+`examenes` / `examen_preguntas` (no las que yo había inventado antes).
+- [x] `lib/ai/anthropic.ts` → `generarPreguntasExamen`: pide a la IA
+      mínimo 20 preguntas (continuo/discontinuo/mixto), valida
+      automáticamente y reintenta hasta 3 veces; el número de intentos se
+      guarda en `examenes.intentos_validacion` (columna que ya existía,
+      pensada exactamente para esto).
+- [x] `/dashboard/examenes`: genera preguntas → se guardan en el banco
+      `preguntas` → se enlazan a un examen versión "A" en
+      `examenes`/`examen_preguntas` → aprobación obligatoria (aprobar o
+      pedir mejora y regenerar).
+- [x] Al aprobar: se crean las versiones **B y C** (nuevas filas en
+      `examenes`, mismas preguntas del banco pero en otro orden —
+      `lib/barajarOrdenPreguntas.ts`). Importante: la tabla real no tiene
+      columna para barajar también las opciones A-D, así que el
+      anti-copia aquí es solo por **orden de preguntas**, no de opciones.
+      Si se quiere barajar opciones también, hace falta agregar una
+      columna nueva — no lo hice unilateralmente para no chocar con el
+      diseño de la otra sesión.
+- [x] Impresión con membrete: `/dashboard/examenes/imprimir/[id]` (cada
+      id es una versión específica) y `/dashboard/examenes/imprimir/[id]/claves`
+      (hoja de respuestas, solo docente).
+- [x] Como `examenes` no tiene columna de "historial", pedir mejora
+      **no conserva** el intento anterior (a diferencia del Generador de
+      Clases) — coherente con el esquema real tal cual está.
+- [x] La agrupación de A/B/C en la tabla de "Tus exámenes" es una
+      heurística por (`asignacion_id` + `tema` idénticos), porque no hay
+      una columna que las enlace explícitamente. Si un docente repite
+      el mismo tema literal para dos exámenes distintos de la misma
+      clase, se agruparían por error — riesgo bajo, pero queda anotado.
+
+### Sin construir todavía (para no inventar sobre features ajenas)
+- **Horarios** (`franjas_horarias`, `horario_clases`, `horarios_emergentes`):
+  la tabla ya existe en producción pero no hay código de UI en este zip.
+- **Formatos día a día** (`formatos_dia_a_dia`) y **temas extraídos del
+  plan de área** (`area_plan_temas`): mismo caso, tabla real sin UI aquí.
+- Calificación por OCR, rúbricas e informes (lo que antes llamé Fases 6-7):
+  quedaron sin construir en este zip porque dependían de mi versión vieja
+  de `examenes_icfes`. Se reconstruyen en un próximo paso ya apuntando a
+  `examenes`/`preguntas` reales.
+
+### Pendiente de tu parte
+1. **Antes que nada**: sigue buscando esa carpeta del proyecto en tu
+   computador (la de la sesión paralela) — si aparece, esas 3 features
+   (horarios, formatos, temas extraídos) probablemente ya tengan código
+   funcionando que no hay que reconstruir de cero.
+2. Mientras tanto, puedes probar YA la Fase 5 reconstruida: no requiere
+   ninguna migración nueva (las tablas ya existen), solo reemplazar el
+   código con este zip, `npm install`, `npm run dev`, y probar
+   `/dashboard/examenes`.
+
+## HORARIOS ✅ CONSTRUIDA en este chat (esquema real, sin migración nueva)
+Contra las tablas reales `franjas_horarias` / `horario_clases` /
+`horarios_emergentes` / `horario_emergente_clases`, que ya existían en
+producción sin ningún código de UI conocido.
+- [x] `/rector/horarios`: administra las franjas horarias del colegio
+      (nombre + hora inicio/fin) y arma el horario semanal **por grupo**:
+      una cuadrícula franja × día (lunes a viernes) donde cada celda es
+      la clase (docente + área/asignatura) que dicta ahí. Guarda en
+      tiempo real, celda por celda.
+- [x] `/rector/horarios-emergentes`: crea un horario especial temporal
+      (motivo, fecha de inicio, días de duración — ej. una jornada
+      pedagógica) sin tocar el horario normal, y arma su propia
+      cuadrícula por grupo igual que el horario regular.
+- [x] `/dashboard/horario` (docente): vista de solo lectura de su propio
+      horario semanal, más cualquier horario emergente activo que
+      incluya alguna de sus clases.
+- [x] Sidebar: "Mi horario" (docente), "Horarios" y "Horarios
+      emergentes" (rector).
+
+### Simplificado a propósito en esta fase
+- `dia_semana` se asume 1=lunes … 5=viernes (semana escolar de 5 días);
+  no hay fin de semana en la cuadrícula. Si el colegio real necesita
+  sábados, se ajusta fácil (agregar el día 6 a la lista `DIAS`).
+- Una celda del horario regular solo puede tener UNA clase por
+  grupo+día+franja (si eliges otra asignación en la misma celda,
+  reemplaza la anterior) — es el comportamiento esperado de un horario
+  escolar normal, no una limitación accidental.
+- El horario emergente no "desactiva" automáticamente el horario normal
+  en las fechas que cubre — ambos quedan visibles por separado. Si se
+  quiere que el emergente oculte el normal automáticamente en esas
+  fechas, es un ajuste de UI a futuro, no de base de datos.
+
+## NOTA TEMPORAL: Exámenes ICFES corriendo con Gemini, no Anthropic
+El usuario no tiene saldo cargado en console.anthropic.com todavía (solo
+cuenta de claude.ai, que es distinta). Como Gemini sí tiene nivel
+gratuito, se extrajo el prompt y el validador de preguntas a
+`lib/ai/examenes-compartido.ts` (compartido entre proveedores) y se
+agregó `generarPreguntasExamenGemini` en `lib/ai/gemini.ts` con el mismo
+contrato exacto que `generarPreguntasExamen` de `lib/ai/anthropic.ts`.
+Las rutas `app/api/ai/generar-examen/route.ts` y
+`app/api/ai/aprobar-examen/route.ts` importan hoy la versión de Gemini.
+
+**Para volver a Anthropic cuando haya saldo cargado**: en esos dos
+archivos, cambiar el import de `generarPreguntasExamenGemini` (de
+`@/lib/ai/gemini`) por `generarPreguntasExamen` (de `@/lib/ai/anthropic`)
+— misma firma, no hay que tocar nada más. El Generador de Clases
+(`/dashboard/generador-ia`) NO se tocó y sigue usando Anthropic, así que
+seguirá sin funcionar hasta que haya saldo ahí.
+
+## Imágenes reales para preguntas discontinuas ✅ (este chat)
+A pedido explícito del usuario: las preguntas "discontinuas" **y también
+las "mixtas"** ahora generan una imagen real (tabla/gráfico) con Gemini,
+en vez de solo describirla en palabras. Se agregó la columna
+`preguntas.imagen_url` (migración `009_imagen_preguntas_discontinuas.sql`,
+ya aplicada en producción), y `lib/generarImagenPregunta.ts` que genera
+la imagen, la sube al bucket privado `documentos` (carpeta del docente)
+y devuelve una URL firmada para mostrarla de inmediato. El prompt del
+generador se ajustó para que, en preguntas discontinuas/mixtas, el
+"contexto" describa datos concretos y graficables (cifras, categorías,
+ejes) en vez de una descripción ambigua, para que la imagen generada
+tenga sentido real. Si la generación de imagen falla (cuota, error del
+proveedor), la pregunta se guarda igual, solo sin imagen — nunca bloquea
+el examen completo. Se ve tanto en la vista previa del docente como en
+la impresión (URL firmada generada en el momento).
+
+### ⚠️ Limitación real descubierta al probar: el nivel gratuito de
+### Gemini NO incluye generación de imágenes (límite = 0)
+Probado en vivo: `gemini-3.1-flash-image` devuelve 429 con
+`"limit": 0` para cuentas sin facturación activa — no es que se agote
+la cuota, es que el nivel gratuito no incluye nada de este modelo. Por
+eso, mientras el usuario no active facturación en Google AI Studio (el
+costo por imagen es bajo, pero no es gratis) o cargue saldo en
+Anthropic, las preguntas discontinuas/mixtas seguirán mostrando solo el
+texto descriptivo — que es exactamente el comportamiento de respaldo
+que ya estaba diseñado para cuando la imagen falla, así que el examen
+nunca se rompe por esto. Se ajustó `generarImagen` para NO reintentar
+ante error 429 (antes perdía ~57 segundos reintentando algo que nunca
+iba a funcionar sin facturación) — solo reintenta ante caídas 5xx
+puntuales del servidor.
+
+## NOTA TEMPORAL: Generador de Clases también corriendo con Gemini
+Mismo motivo que Exámenes ICFES (usuario sin saldo en Anthropic todavía).
+Se extrajo el prompt a `lib/ai/clase-compartida.ts` (compartido entre
+proveedores) y se agregó `generarClaseGemini` en `lib/ai/gemini.ts`, con
+el mismo contrato que `generarClase` de `lib/ai/anthropic.ts`. Las rutas
+`app/api/ai/generar-clase/route.ts` y `app/api/ai/aprobar/route.ts` usan
+hoy la versión de Gemini.
+
+**Para volver a Anthropic cuando haya saldo**: en esos dos archivos,
+cambiar el import de `generarClaseGemini` (de `@/lib/ai/gemini`) por
+`generarClase` (de `@/lib/ai/anthropic`) — misma firma, no hay que tocar
+nada más. Con esto, TODA la IA de texto del proyecto (clases y exámenes)
+corre hoy sobre Gemini; Anthropic queda listo para retomarse con solo
+cambiar esos 4 imports en total (2 de exámenes + 2 de clases) el día que
+haya saldo cargado.
+
+## Arreglos de impresión y hoja de respuestas del estudiante ✅ (este chat)
+A partir de pruebas reales del usuario:
+- [x] **Tablas ASCII rotas al imprimir**: cuando falla la imagen (ver nota
+      de Gemini arriba), la IA a veces describía los datos con líneas de
+      guiones tipo tabla ("|---|---|"), que se salían del margen de la
+      hoja impresa. Se le prohibió explícitamente ese formato en el
+      prompt (`lib/ai/examenes-compartido.ts`) — ahora describe los datos
+      en prosa o lista simple. Además, como seguro adicional pase lo que
+      pase, se forzó el ajuste de línea (`break-words`,
+      `overflow-wrap: anywhere`) en el texto de contexto tanto en la
+      vista previa como en la impresión, para que nada pueda salirse de
+      la hoja sin importar qué genere la IA.
+- [x] **Hoja de respuestas del estudiante** (nueva, distinta de la clave
+      del docente): `/dashboard/examenes/imprimir/[id]/hoja-respuestas`
+      — óvalos en blanco (A/B/C/D) por cada pregunta. Se distingue de la
+      "Clave de respuestas (docente)" (la que ya existía, con las
+      respuestas correctas — nunca se le entrega al estudiante).
+      Enlazada tanto en la vista previa recién aprobada como en la tabla
+      "Tus exámenes".
+- [x] **Personalizada por estudiante** (ajuste tras prueba real): en vez
+      de líneas en blanco para que el estudiante escriba a mano su
+      nombre/documento, la hoja imprime **una página por cada estudiante
+      del grupo** (tomados de la tabla `estudiantes`, que el rector ya
+      carga en Fase 0-1 con nombre completo y número de documento), ya
+      diligenciada con nombre, documento, grado/grupo y el nombre del
+      docente — solo queda en blanco la fecha (se llena el día del
+      examen). Todas las hojas del grupo salen en un mismo documento,
+      una por página (`break-after-page`), listas para separar e
+      imprimir. Si el grupo no tiene estudiantes cargados, se muestra un
+      aviso claro en vez de una hoja vacía. Texto de instrucción
+      actualizado a "lápiz HB2" (antes decía "lapicero").
+
+- [x] **El examen completo también se personaliza por estudiante** (mismo
+      ajuste, extendido a pedido del usuario): `/dashboard/examenes/imprimir/[id]`
+      ahora imprime el cuadernillo completo de preguntas **una vez por
+      cada estudiante del grupo**, con su nombre/documento/grado-grupo/
+      docente ya diligenciados, igual que la hoja de respuestas. Las
+      imágenes de las preguntas se firman una sola vez y se comparten
+      entre todas las copias (no se regeneran por estudiante). **Ojo**:
+      esto multiplica el tamaño del PDF por el número de estudiantes del
+      grupo — para un grupo de 30 con un examen de 20 preguntas es un
+      documento largo, pero es exactamente el comportamiento pedido
+      (cuadernillos individuales listos para repartir).
+
+## Estimación IRT en todas las preguntas ✅ (este chat)
+A pedido explícito: cada pregunta generada (del generador genérico Y del
+de inglés) ahora incluye una estimación inicial de los 3 parámetros IRT
+(modelo logístico 3PL, igual al que usa el ICFES real): `irt_dificultad`
+(b, -3 a 3), `irt_discriminacion` (a, 0.5-2.0), `irt_adivinacion` (c,
+≈1/número de opciones). **Importante, para no generar falsas
+expectativas**: esto es una *estimación experta de la IA al momento de
+crear la pregunta*, NO una calibración estadística real — esa solo se
+obtiene con resultados reales de muchos estudiantes a lo largo del
+tiempo (ver nota ya existente sobre esto en la sección de Fase 6). Las
+columnas ya existían en la tabla `preguntas` (creadas por la sesión
+paralela), simplemente ahora se llenan.
+
+## Subida de estudiantes y formato de día a día por el docente ✅ (este chat)
+- [x] **Estudiantes**: `/dashboard/estudiantes` — se descubrió que la
+      regla de seguridad de la tabla `estudiantes` ya permitía a
+      cualquier miembro de la institución (no solo al rector) cargar el
+      listado, así que solo hacía falta la página. Reutiliza el mismo
+      componente de carga masiva por CSV que ya tenía el rector
+      (`GestionEstudiantes.tsx`), pero acotado a los grados/grupos donde
+      el docente tiene clase asignada.
+- [x] **Formato de día a día**: `/dashboard/dia-a-dia` ahora tiene arriba
+      un cuadro para subir el archivo de formato/plantilla institucional
+      (Word/PDF/imagen) a la tabla real `formatos_dia_a_dia` (existía sin
+      interfaz). Subir uno nuevo desactiva el anterior como "activo".
+- [x] **Plan de área**: ya existía desde la Fase 2 (`/dashboard/plan-de-area`),
+      no hizo falta construir nada nuevo, solo se confirmó que sigue ahí.
+
+## Examen de inglés — formato oficial Saber 11.° ✅ (este chat)
+A pedido explícito, investigado contra fuentes oficiales del ICFES
+(Marco de referencia de la Prueba de Inglés Saber 11°/TyT/Pro, y la
+ficha de Niveles de Desempeño de septiembre 2025) en vez de inventar la
+estructura. Complementado con el examen de ejemplo real que el usuario
+subió (un simulacro con la misma estructura de 7 partes y 45 preguntas).
+
+**Hallazgo importante para tener en cuenta**: el ICFES actualizó sus
+niveles de desempeño. Ya NO son 5 niveles (A-, A1, A2, B1, B+, versión
+antigua) sino **4 niveles vigentes: Pre A1, A1, A2, B1** — la prueba no
+evalúa niveles B2 en adelante del MCER. El generador usa los 4 vigentes.
+
+- [x] `lib/ai/ingles-compartido.ts`: especificación FIJA y verificada de
+      las 7 partes oficiales (número de preguntas y de opciones por
+      parte, nivel MCER, competencia evaluada) — la IA nunca decide esta
+      estructura, solo llena el contenido dentro de cada parte exacta:
+      Parte 1 (5, 3 op., ubicar avisos), Parte 2 (5, 8 op. compartidas,
+      vocabulario), Parte 3 (5, 3 op., conversaciones), Parte 4 (8, 3
+      op., texto con espacios general), Parte 5 (7, 3 op., lectura
+      literal), Parte 6 (5, 4 op., lectura inferencial), Parte 7 (10, 4
+      op., texto con espacios gramatical/léxico). Total 45 preguntas.
+- [x] `/dashboard/examenes` → sección aparte "Examen de inglés (formato
+      Saber 11°)", con su propio generador (`ExamenInglesGenerador.tsx`)
+      — el docente solo elige la clase y un tema/contexto general (para
+      las partes de lectura y texto con espacios); las partes 1-3 usan
+      situaciones cotidianas variadas, como en el examen real.
+      Aprobación obligatoria igual que el resto (aprobar o regenerar el
+      examen completo con instrucciones de mejora).
+- [x] Impresión agrupada por parte, con instrucciones en español y
+      contenido en inglés (como el examen real): `/dashboard/examenes/imprimir-ingles/[id]`
+      (personalizado por estudiante, igual que el examen genérico) y
+      `/dashboard/examenes/imprimir-ingles/[id]/claves` (clave para el
+      docente). La tabla "Tus exámenes" detecta automáticamente los
+      exámenes de inglés (columna `tipo = 'ingles_saber11'`) y enlaza a
+      estas páginas en vez de las genéricas.
+- [x] Cada pregunta se guarda en la tabla real `preguntas` (una fila por
+      pregunta, igual que el generador genérico) — la pertenencia a una
+      parte NO se guarda en una columna nueva: se reconstruye por
+      posición (orden 1-45) usando las cantidades fijas de
+      `PARTES_INGLES_ICFES`, ya que el orden de las partes nunca cambia.
+
+### Simplificado a propósito en esta fase
+- **Sin versiones B/C (anti-copia)** para el examen de inglés: barajar el
+  orden de las preguntas rompería la correspondencia entre los espacios
+  numerados del texto (Partes 4 y 7) y el banco compartido de palabras
+  de la Parte 2. Si se necesita anti-copia para inglés, es un desarrollo
+  aparte (habría que barajar y renumerar el texto con espacios a la vez,
+  no solo las preguntas).
+- **Solo Gemini**, no hay versión Anthropic de este generador (se agregó
+  directo en el proveedor que el usuario está usando ahora mismo).
+  Cuando haya saldo en Anthropic, replicar `generarExamenInglesGemini` en
+  `lib/ai/anthropic.ts` con el mismo contrato es sencillo si se necesita.
+- Sin hoja de respuestas de óvalos específica para inglés todavía (la
+  cantidad de opciones varía 3/4/8 según la parte, así que la hoja de
+  óvalos genérica del examen normal no le sirve tal cual) — pendiente si
+  se necesita.
 
 ## Fases futuras (mapeadas desde el prompt maestro, sin construir aún)
-- Fase 2: Plan de área (subida + extracción), formato de día a día.
-- Fase 3: Asistencia con membrete institucional.
-- Fase 4: Generador Pedagógico IA (capa de abstracción de proveedor de IA
-  + flujo de aprobación docente obligatorio, sección 3).
-- Fase 5: Exámenes tipo ICFES + validador automático + banco de preguntas
-  + metodología IRT (diseño de ítems primero; calibración estadística
-  solo cuando existan datos suficientes, sección 23).
-- Fase 6: OCR de hojas de respuesta + calificación automática + rúbricas.
-- Fase 7: Informes (PDF/Excel), estadística, planes de mejoramiento.
+- Formatos de día a día y temas extraídos del plan de área (tablas ya
+  existen; falta UI).
+- Calificación por OCR + rúbricas + informes, adaptados al esquema real
+  de exámenes.
 - Fase 8: Panel rector completo (comentarios, recomendaciones, formatos
   institucionales, permisos).
 - Fase 9: Notificaciones, auditoría completa, exportación multi-formato.
-- Fase 10: App móvil (React Native/Expo).
+- Fase 10: App móvil (React Native/Expo) o, alternativa más rápida,
+  convertir esta misma app web en PWA instalable.

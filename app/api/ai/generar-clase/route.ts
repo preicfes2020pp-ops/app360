@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
-import { generarClase } from "@/lib/ai/anthropic";
+// Usando Gemini temporalmente (ver nota en app/api/ai/generar-examen/route.ts).
+// Para volver a Anthropic: import { generarClase } from "@/lib/ai/anthropic";
+import { generarClaseGemini as generarClase } from "@/lib/ai/gemini";
 import type { ContextoGeneracion } from "@/lib/ai/tipos";
 
 // POST /api/ai/generar-clase

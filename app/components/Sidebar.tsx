@@ -13,9 +13,12 @@ const NAV_POR_ROL: Record<RolAula360, { href: string; label: string }[]> = {
   docente: [
     { href: "/dashboard", label: "Inicio" },
     { href: "/dashboard/generador-ia", label: "Generador IA" },
+    { href: "/dashboard/examenes", label: "Exámenes ICFES" },
+    { href: "/dashboard/estudiantes", label: "Estudiantes" },
     { href: "/dashboard/plan-de-area", label: "Plan de área" },
     { href: "/dashboard/dia-a-dia", label: "Día a día" },
     { href: "/dashboard/asistencia", label: "Asistencia" },
+    { href: "/dashboard/horario", label: "Mi horario" },
   ],
   rector: [
     { href: "/rector", label: "Inicio" },
@@ -25,6 +28,12 @@ const NAV_POR_ROL: Record<RolAula360, { href: string; label: string }[]> = {
     { href: "/rector/areas", label: "Áreas y asignaturas" },
     { href: "/rector/asignaciones", label: "Asignación de docentes" },
     { href: "/rector/estudiantes", label: "Estudiantes" },
+    { href: "/rector/horarios", label: "Horarios" },
+    { href: "/rector/horarios-emergentes", label: "Horarios emergentes" },
+    { href: "/saber11", label: "Resultados Saber 11" },
+  ],
+  coordinador: [
+    { href: "/saber11", label: "Resultados Saber 11" },
   ],
   superadmin: [
     { href: "/superadmin", label: "Inicio" },

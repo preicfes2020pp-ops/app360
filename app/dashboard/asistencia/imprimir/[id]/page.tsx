@@ -1,6 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import Image from "next/image";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { puedeVerRecurso } from "@/lib/autorizacion";
 import BotonImprimir from "@/app/components/BotonImprimir";
 
 const ETIQUETA_ESTADO: Record<string, string> = {
@@ -16,7 +17,7 @@ export default async function ImprimirAsistencia({ params }: { params: Promise<{
   const { data: attendance } = await supabase
     .from("attendance")
     .select(`
-      id, fecha,
+      id, fecha, docente_id, institucion_id,
       instituciones(nombre, ciudad, logo_url),
       perfiles(nombre_completo),
       asignaciones_docente(grados(nombre), grupos(nombre), areas(nombre), asignaturas(nombre))
@@ -25,6 +26,7 @@ export default async function ImprimirAsistencia({ params }: { params: Promise<{
     .single();
 
   if (!attendance) notFound();
+  if (!(await puedeVerRecurso(supabase, user.id, attendance))) notFound();
 
   const { data: detalle } = await supabase
     .from("attendance_estudiante")

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import Sidebar from "@/app/components/Sidebar";
 import FormularioDiaDia from "@/app/components/FormularioDiaDia";
+import FormularioFormatoDiaADia from "@/app/components/FormularioFormatoDiaADia";
 
 export default async function DiaADiaDocente() {
   const supabase = await createServerSupabaseClient();
@@ -9,6 +10,14 @@ export default async function DiaADiaDocente() {
   if (!user) redirect("/login");
   const { data: perfil } = await supabase.from("perfiles").select("rol, nombre_completo, institucion_id").eq("id", user.id).single();
   if (!perfil || perfil.rol !== "docente") redirect("/login");
+
+  const { data: formatoActual } = await supabase
+    .from("formatos_dia_a_dia")
+    .select("id, archivo_nombre, activo")
+    .eq("docente_id", user.id).eq("activo", true)
+    .order("creado_en", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   const { data: asignacionesRaw } = await supabase
     .from("asignaciones_docente")
@@ -33,6 +42,7 @@ export default async function DiaADiaDocente() {
       <main className="flex-1 p-8 flex flex-col gap-6">
         <h1 className="text-2xl font-bold" style={{ color: "var(--a360-azul-oscuro)" }}>Día a día</h1>
 
+        <FormularioFormatoDiaADia institucionId={perfil.institucion_id} docenteId={user.id} formatoActual={formatoActual ?? null} />
         <FormularioDiaDia institucionId={perfil.institucion_id} docenteId={user.id} asignaciones={asignaciones} />
 
         <div className="bg-white border rounded-xl overflow-hidden">

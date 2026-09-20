@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
-import { generarClase } from "@/lib/ai/anthropic";
+// Ver nota en app/api/ai/generar-clase/route.ts sobre este cambio temporal a Gemini.
+import { generarClaseGemini as generarClase } from "@/lib/ai/gemini";
 import type { ContextoGeneracion } from "@/lib/ai/tipos";
 
 // POST /api/ai/aprobar
@@ -13,6 +14,9 @@ export async function POST(req: NextRequest) {
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado." }, { status: 401 });
+
+  const { data: perfil } = await supabase.from("perfiles").select("rol").eq("id", user.id).single();
+  if (!perfil || perfil.rol !== "docente") return NextResponse.json({ error: "Solo un docente puede aprobar generaciones." }, { status: 403 });
 
   const { generacionId, aprobado, instruccionesMejora } = await req.json();
   if (!generacionId) return NextResponse.json({ error: "Falta generacionId." }, { status: 400 });
