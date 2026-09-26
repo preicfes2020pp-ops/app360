@@ -57,7 +57,7 @@ export default function Sidebar({
   }
 
   return (
-    <aside className="w-64 shrink-0 bg-white border-r flex flex-col justify-between min-h-screen">
+    <aside className="w-64 shrink-0 bg-white border-r flex flex-col justify-between min-h-screen no-imprimir">
       <div>
         <div className="flex items-center gap-2 px-5 py-5 border-b">
           <Image src="/logo.png" alt="AULA360" width={36} height={36} />
@@ -66,16 +66,30 @@ export default function Sidebar({
           </span>
         </div>
         <nav className="flex flex-col gap-1 p-3">
-          {NAV_POR_ROL[rol].map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-gray-100"
-              style={{ color: "var(--a360-texto)" }}
-            >
-              {item.label}
-            </Link>
-          ))}
+          {NAV_POR_ROL[rol].map((item) =>
+            item.href === "/saber11" ? (
+              // Enlace especial: fuerza una recarga completa de la página en
+              // vez de la navegación rápida de Next.js, para evitar quedarse
+              // con una versión vieja guardada en el navegador.
+              <a
+                key={item.href}
+                href={item.href}
+                className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-gray-100"
+                style={{ color: "var(--a360-texto)" }}
+              >
+                {item.label}
+              </a>
+            ) : (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-gray-100"
+                style={{ color: "var(--a360-texto)" }}
+              >
+                {item.label}
+              </Link>
+            )
+          )}
         </nav>
       </div>
       <div className="p-3 border-t">

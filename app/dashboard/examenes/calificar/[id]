@@ -1,0 +1,122 @@
+import { redirect } from "next/navigation";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
+import Sidebar from "@/app/components/Sidebar";
+import CalificarExamen from "@/app/components/CalificarExamen";
+
+export default async function CalificarExamenPagina({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+
+  const supabase = await createServerSupabaseClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+
+  const { data: perfil } = await supabase
+    .from("perfiles")
+    .select("rol, nombre_completo")
+    .eq("id", user.id)
+    .single();
+
+  if (!perfil || perfil.rol !== "docente") {
+    redirect("/login");
+  }
+
+  const { data: examen } = await supabase
+    .from("examenes")
+    .select("id, tema, version, estado, asignacion_id")
+    .eq("id", id)
+    .single();
+
+  if (!examen) {
+    return (
+      <div className="flex">
+        <Sidebar
+          rol="docente"
+          nombre={perfil.nombre_completo}
+        />
+
+        <main className="flex-1 p-8">
+          <p className="text-sm text-gray-500">
+            No se encontró este examen, o no tienes permiso sobre él.
+          </p>
+        </main>
+      </div>
+    );
+  }
+
+  const { data: asignacion } = await supabase
+    .from("asignaciones_docente")
+    .select("grupo_id, grupos(nombre)")
+    .eq("id", examen.asignacion_id)
+    .single();
+
+  const grupoId = asignacion?.grupo_id;
+
+  const nombreGrupo =
+    (asignacion?.grupos as unknown as { nombre: string } | null)?.nombre ??
+    "—";
+
+  const { data: estudiantes } = grupoId
+    ? await supabase
+        .from("estudiantes")
+        .select("id, nombre_completo, numero_documento")
+        .eq("grupo_id", grupoId)
+        .order("nombre_completo")
+    : {
+        data: [] as {
+          id: string;
+          nombre_completo: string;
+          numero_documento: string | null;
+        }[],
+      };
+
+  const { data: hojas } = await supabase
+    .from("hojas_respuesta")
+    .select(
+      "estudiante_id, correctas, incorrectas, sin_marcar, puntaje_porcentaje, estado, error_detalle"
+    )
+    .eq("examen_id", examen.id);
+
+  return (
+    <div className="flex">
+      <Sidebar
+        rol="docente"
+        nombre={perfil.nombre_completo}
+      />
+
+      <main className="flex-1 p-8 flex flex-col gap-6">
+        <div>
+          <h1
+            className="text-2xl font-bold"
+            style={{ color: "var(--a360-azul-oscuro)" }}
+          >
+            Calificar examen
+          </h1>
+
+          <p className="text-sm text-gray-500 mt-1">
+            {examen.tema} — Versión {examen.version} — Grupo {nombreGrupo}
+          </p>
+
+          <p className="text-xs text-gray-400 mt-1">
+            Sube una foto (celular) o un PDF escaneado de la hoja de
+            respuestas de cada estudiante. AULA360 la lee automáticamente y
+            la califica contra las respuestas correctas.
+          </p>
+        </div>
+
+        <CalificarExamen
+          examenId={examen.id}
+          estudiantes={estudiantes ?? []}
+          hojasIniciales={hojas ?? []}
+        />
+      </main>
+    </div>
+  );
+}

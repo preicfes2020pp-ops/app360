@@ -24,3 +24,12 @@ body {
 .a360-gradiente {
   background: linear-gradient(135deg, var(--a360-azul) 0%, var(--a360-verde) 100%);
 }
+
+/* Al descargar en PDF (Ctrl/Cmd+P o el botón "Descargar en PDF"), solo se
+   imprime el reporte de Saber 11 — se ocultan el menú lateral, la sección
+   de subida de PDFs, y los controles de filtro que no aportan al reporte. */
+@media print {
+  .no-imprimir {
+    display: none !important;
+  }
+}

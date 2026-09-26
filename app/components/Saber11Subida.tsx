@@ -4,14 +4,21 @@ import { useRef, useState } from "react";
 
 type Creado = { archivo: string; nombre: string; anio: number; puntajeGlobal: number };
 type Fallido = { archivo: string; motivo: string };
+type Grupo = { id: string; nombre: string; jornada: string | null; anio_lectivo: number | null };
 
-export default function Saber11Subida() {
+// Next.js tipa el atributo HTML no estándar 'webkitdirectory' de forma
+// distinta según la versión; se castea el input a 'any' solo para ese
+// atributo puntual, en vez de para todo el elemento.
+
+export default function Saber11Subida({ grupos }: { grupos: Grupo[] }) {
   const [arrastrando, setArrastrando] = useState(false);
   const [subiendo, setSubiendo] = useState(false);
   const [creados, setCreados] = useState<Creado[]>([]);
   const [fallidos, setFallidos] = useState<Fallido[]>([]);
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [grupoId, setGrupoId] = useState<string>("");
+  const inputArchivosRef = useRef<HTMLInputElement>(null);
+  const inputCarpetaRef = useRef<HTMLInputElement>(null);
 
   const anioActual = new Date().getFullYear();
   const [anioAgregado, setAnioAgregado] = useState(anioActual - 1);
@@ -19,8 +26,13 @@ export default function Saber11Subida() {
   const [mensajeAgregado, setMensajeAgregado] = useState<string | null>(null);
 
   async function subirIndividuales(archivos: FileList | File[]) {
-    const lista = Array.from(archivos);
-    if (lista.length === 0) return;
+    const soloPdfs = Array.from(archivos).filter(
+      (a) => a.type === "application/pdf" || a.name.toLowerCase().endsWith(".pdf")
+    );
+    if (soloPdfs.length === 0) {
+      setErrorGeneral("No se encontró ningún PDF en lo que seleccionaste.");
+      return;
+    }
 
     setSubiendo(true);
     setErrorGeneral(null);
@@ -29,12 +41,10 @@ export default function Saber11Subida() {
 
     try {
       const formData = new FormData();
-      lista.forEach((archivo) => formData.append("pdfs", archivo));
+      soloPdfs.forEach((archivo) => formData.append("pdfs", archivo));
+      if (grupoId) formData.append("grupoId", grupoId);
 
-      const respuesta = await fetch("/api/saber11/individuales", {
-        method: "POST",
-        body: formData,
-      });
+      const respuesta = await fetch("/api/saber11/individuales", { method: "POST", body: formData });
       const datos = await respuesta.json();
 
       if (!respuesta.ok) {
@@ -48,6 +58,8 @@ export default function Saber11Subida() {
       setErrorGeneral("No se pudo conectar con el servidor. Intenta de nuevo.");
     } finally {
       setSubiendo(false);
+      if (inputArchivosRef.current) inputArchivosRef.current.value = "";
+      if (inputCarpetaRef.current) inputCarpetaRef.current.value = "";
     }
   }
 
@@ -82,16 +94,43 @@ export default function Saber11Subida() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 no-imprimir">
       {/* --- Subida de resultados individuales --- */}
       <div className="bg-white border rounded-xl p-6">
         <h2 className="font-bold mb-1" style={{ color: "var(--a360-azul-oscuro)" }}>
           Subir resultados individuales
         </h2>
         <p className="text-sm text-gray-500 mb-4">
-          Arrastra aquí los PDF de "Reporte de resultados" de cada estudiante (puedes seleccionar
-          varios a la vez). AULA360 los lee automáticamente y calcula el análisis institucional.
+          Arrastra aquí los PDF de "Reporte de resultados" de cada estudiante, selecciona varios
+          archivos, o sube una carpeta completa de una vez. AULA360 los lee automáticamente y
+          calcula el análisis institucional.
         </p>
+
+        <div className="mb-4">
+          <label className="block text-sm text-gray-500 mb-1">
+            Grupo al que pertenecen estos resultados (opcional)
+          </label>
+          <select
+            value={grupoId}
+            onChange={(e) => setGrupoId(e.target.value)}
+            className="border rounded-lg px-3 py-2 text-sm w-full max-w-sm"
+          >
+            <option value="">Sin asignar a un grupo</option>
+            {grupos.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.nombre}
+                {g.jornada ? ` — ${g.jornada}` : ""}
+                {g.anio_lectivo ? ` (${g.anio_lectivo})` : ""}
+              </option>
+            ))}
+          </select>
+          {grupos.length === 0 && (
+            <p className="text-xs text-gray-400 mt-1">
+              Todavía no tienes grupos de grado once registrados. Puedes subir los resultados igual,
+              sin asignarlos a un grupo, y vincularlos más adelante.
+            </p>
+          )}
+        </div>
 
         <div
           onDragOver={(e) => {
@@ -104,23 +143,52 @@ export default function Saber11Subida() {
             setArrastrando(false);
             if (e.dataTransfer.files.length > 0) subirIndividuales(e.dataTransfer.files);
           }}
-          onClick={() => inputRef.current?.click()}
-          className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors ${
+          className={`border-2 border-dashed rounded-xl p-10 text-center transition-colors ${
             arrastrando ? "border-blue-400 bg-blue-50" : "border-gray-300"
           }`}
         >
-          <p className="text-gray-500">
+          <p className="text-gray-500 mb-4">
             {subiendo
               ? "Procesando PDFs, esto puede tardar un momento..."
-              : "Arrastra los PDF aquí, o haz clic para elegirlos"}
+              : "Arrastra los PDF aquí, o elige una opción abajo"}
           </p>
+
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              disabled={subiendo}
+              onClick={() => inputArchivosRef.current?.click()}
+              className="rounded-lg px-4 py-2 text-sm font-medium border disabled:opacity-50"
+              style={{ borderColor: "var(--a360-azul-oscuro)", color: "var(--a360-azul-oscuro)" }}
+            >
+              Elegir archivos PDF
+            </button>
+            <button
+              type="button"
+              disabled={subiendo}
+              onClick={() => inputCarpetaRef.current?.click()}
+              className="rounded-lg px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              style={{ backgroundColor: "var(--a360-azul-oscuro)" }}
+            >
+              Elegir una carpeta completa
+            </button>
+          </div>
+
           <input
-            ref={inputRef}
+            ref={inputArchivosRef}
             type="file"
             accept="application/pdf"
             multiple
             className="hidden"
             onChange={(e) => e.target.files && subirIndividuales(e.target.files)}
+          />
+          <input
+            ref={inputCarpetaRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => e.target.files && subirIndividuales(e.target.files)}
+            {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
           />
         </div>
 
@@ -167,8 +235,9 @@ export default function Saber11Subida() {
         </h2>
         <p className="text-sm text-gray-500 mb-4">
           Cuando el ICFES publique el reporte oficial de la institución (usualmente un año después),
-          súbelo aquí para tenerlo archivado junto al análisis que ya calculó AULA360. Puedes subir
-          hasta los últimos 10 años.
+          súbelo aquí en PDF o en Excel (el ICFES entrega los reportes agregados en ambos formatos)
+          para tenerlo archivado junto al análisis que ya calculó AULA360. Puedes subir hasta los
+          últimos 10 años.
         </p>
         <form onSubmit={subirAgregado} className="flex flex-wrap items-end gap-3">
           <div>
@@ -186,8 +255,14 @@ export default function Saber11Subida() {
             </select>
           </div>
           <div>
-            <label className="block text-sm text-gray-500 mb-1">Archivo PDF</label>
-            <input name="pdfAgregado" type="file" accept="application/pdf" required className="text-sm" />
+            <label className="block text-sm text-gray-500 mb-1">Archivo (PDF o Excel)</label>
+            <input
+              name="pdfAgregado"
+              type="file"
+              accept="application/pdf,.pdf,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+              required
+              className="text-sm"
+            />
           </div>
           <button
             type="submit"

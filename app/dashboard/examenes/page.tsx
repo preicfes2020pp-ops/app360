@@ -109,9 +109,9 @@ export default async function ExamenesPage() {
                                 <Link href={`/dashboard/examenes/imprimir/${f.versiones["A"]}/claves`} target="_blank" className="text-xs underline text-gray-500">
                                   Clave
                                 </Link>
-                                <Link href={`/dashboard/examenes/imprimir/${f.versiones["A"]}/hoja-respuestas`} target="_blank" className="text-xs underline text-gray-500">
-                                  Hoja de respuestas
-                                </Link>
+                                <Link href={`/dashboard/examenes/calificar/${f.versiones["A"]}`} className="text-xs underline text-gray-500"> Calificar </Link>
+                                
+                                
                               </>
                             )}
                           </div>

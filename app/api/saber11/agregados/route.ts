@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
-const MAX_TAMANO_PDF_BYTES = 20 * 1024 * 1024; // 20 MB (el agregado trae a todos los estudiantes)
+const MAX_TAMANO_BYTES = 20 * 1024 * 1024; // 20 MB (el agregado trae a todos los estudiantes)
+
+// El ICFES entrega los reportes agregados tanto en PDF como en Excel.
+const TIPOS_PERMITIDOS: Record<string, string> = {
+  "application/pdf": "pdf",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+  "application/vnd.ms-excel": "xls",
+};
 
 export async function POST(request: NextRequest) {
   const supabase = await createServerSupabaseClient();
@@ -35,7 +42,7 @@ export async function POST(request: NextRequest) {
   const anioRaw = formData.get("anio");
 
   if (!(archivo instanceof File)) {
-    return NextResponse.json({ error: "No se recibió el archivo PDF." }, { status: 400 });
+    return NextResponse.json({ error: "No se recibió ningún archivo." }, { status: 400 });
   }
   const anio = parseInt(String(anioRaw), 10);
   const anioActual = new Date().getFullYear();
@@ -45,23 +52,57 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
-  if (archivo.type !== "application/pdf") {
-    return NextResponse.json({ error: "El archivo debe ser un PDF." }, { status: 400 });
+
+  // Detecta el tipo por el nombre del archivo si el navegador no mandó un
+  // "type" reconocible (pasa a veces con .xls en algunos navegadores).
+  const extensionPorNombre = archivo.name.toLowerCase().split(".").pop();
+  const extension =
+    TIPOS_PERMITIDOS[archivo.type] ??
+    (extensionPorNombre === "pdf" || extensionPorNombre === "xlsx" || extensionPorNombre === "xls"
+      ? extensionPorNombre
+      : null);
+
+  if (!extension) {
+    return NextResponse.json(
+      { error: "El archivo debe ser un PDF o un Excel (.xlsx / .xls)." },
+      { status: 400 }
+    );
   }
-  if (archivo.size > MAX_TAMANO_PDF_BYTES) {
+  if (archivo.size > MAX_TAMANO_BYTES) {
     return NextResponse.json({ error: "El archivo pesa más de 20 MB." }, { status: 400 });
   }
 
   const buffer = Buffer.from(await archivo.arrayBuffer());
-  const rutaPdf = `${institucionId}/agregados/${anio}.pdf`;
+  const rutaArchivo = `${institucionId}/agregados/${anio}.${extension}`;
+  const contentType =
+    archivo.type ||
+    (extension === "pdf"
+      ? "application/pdf"
+      : extension === "xlsx"
+        ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        : "application/vnd.ms-excel");
+
+  // Si ya existía un reporte de este año en el otro formato (por ejemplo
+  // subieron antes el PDF y ahora suben el Excel), se borra el anterior
+  // para no dejar dos archivos huérfanos del mismo año.
+  const { data: reporteExistente } = await supabase
+    .from("saber11_reportes_agregados")
+    .select("pdf_path")
+    .eq("institucion_id", institucionId)
+    .eq("anio", anio)
+    .maybeSingle();
+
+  if (reporteExistente && reporteExistente.pdf_path !== rutaArchivo) {
+    await supabase.storage.from("saber11-pdfs").remove([reporteExistente.pdf_path]);
+  }
 
   const { error: errorSubida } = await supabase.storage
     .from("saber11-pdfs")
-    .upload(rutaPdf, buffer, { contentType: "application/pdf", upsert: true });
+    .upload(rutaArchivo, buffer, { contentType, upsert: true });
 
   if (errorSubida) {
     return NextResponse.json(
-      { error: `No se pudo guardar el PDF: ${errorSubida.message}` },
+      { error: `No se pudo guardar el archivo: ${errorSubida.message}` },
       { status: 400 }
     );
   }
@@ -69,7 +110,7 @@ export async function POST(request: NextRequest) {
   const { error: errorGuardado } = await supabase
     .from("saber11_reportes_agregados")
     .upsert(
-      { institucion_id: institucionId, anio, pdf_path: rutaPdf, subido_por: user.id },
+      { institucion_id: institucionId, anio, pdf_path: rutaArchivo, subido_por: user.id },
       { onConflict: "institucion_id,anio" }
     );
 
@@ -85,7 +126,7 @@ export async function POST(request: NextRequest) {
     institucion_id: institucionId,
     accion: "subir_reporte_agregado_saber11",
     entidad: "saber11_reportes_agregados",
-    detalle: { anio },
+    detalle: { anio, formato: extension },
   });
 
   return NextResponse.json({ error: null, anio });

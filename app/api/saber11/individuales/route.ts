@@ -204,6 +204,23 @@ export async function POST(request: NextRequest) {
 
   const formData = await request.formData();
   const archivos = formData.getAll("pdfs").filter((f): f is File => f instanceof File);
+  const grupoIdRaw = formData.get("grupoId");
+  const grupoId = typeof grupoIdRaw === "string" && grupoIdRaw.trim() !== "" ? grupoIdRaw : null;
+
+  if (grupoId) {
+    // Verifica que el grupo exista y pertenezca a esta misma institución,
+    // para que nadie pueda asociar resultados a un grupo de otro colegio.
+    const { data: grupoValido } = await supabase
+      .from("grupos")
+      .select("id")
+      .eq("id", grupoId)
+      .eq("institucion_id", institucionId)
+      .maybeSingle();
+    if (!grupoValido) {
+      return NextResponse.json({ error: "El grupo seleccionado no es válido." }, { status: 400 });
+    }
+  }
+
 
   if (archivos.length === 0) return NextResponse.json({ error: "No se recibió ningún archivo PDF." }, { status: 400 });
   if (archivos.length > MAX_PDFS_POR_SUBIDA) {
@@ -267,6 +284,7 @@ export async function POST(request: NextRequest) {
       {
         institucion_id: institucionId,
         estudiante_id: estudianteEncontrado?.id ?? null,
+        grupo_id: grupoId,
         nombre_completo: datos.nombreCompleto,
         tipo_documento: datos.tipoDocumento,
         numero_documento: datos.numeroDocumento,
