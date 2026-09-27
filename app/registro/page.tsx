@@ -1,19 +1,20 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase";
-import { generarCodigoDocente } from "@/lib/codigoGrupo";
 import FotoPerfil from "@/app/components/FotoPerfil";
 
 type Institucion = { id: string; nombre: string };
+type Rol = "docente" | "rector" | "coordinador";
 
 export default function RegistroDocente() {
   const router = useRouter();
   const supabase = createClient();
 
   const [instituciones, setInstituciones] = useState<Institucion[]>([]);
+  const [rol, setRol] = useState<Rol>("docente");
   const [form, setForm] = useState({
     nombreCompleto: "",
     numeroDocumento: "",
@@ -21,6 +22,7 @@ export default function RegistroDocente() {
     telefono: "",
     institucionId: "",
     areaPrincipal: "",
+    codigo: "",
     password: "",
   });
   const [fotoBlob, setFotoBlob] = useState<Blob | null>(null);
@@ -47,13 +49,16 @@ export default function RegistroDocente() {
     setError(null);
     setOk(null);
 
-    if (!form.institucionId) {
+    if (rol === "docente" && !form.institucionId) {
       setError("Selecciona tu institución.");
+      return;
+    }
+    if (rol !== "docente" && !form.codigo.trim()) {
+      setError("Escribe el código de invitación que te dieron.");
       return;
     }
     setEnviando(true);
 
-    // 1) Crear el usuario en Supabase Auth.
     const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
       email: form.correo,
       password: form.password,
@@ -66,20 +71,8 @@ export default function RegistroDocente() {
     }
     const userId = signUpData.user.id;
 
-    // 2) Si "Confirmar correo" está activo en Supabase Auth, aquí no hay
-    // sesión todavía y no se puede insertar el perfil por RLS. Se lo
-    // indicamos honestamente al docente en vez de fallar en silencio.
-    if (!signUpData.session) {
-      setOk(
-        "Cuenta creada. Revisa tu correo para confirmar tu cuenta, luego inicia sesión para completar tu perfil."
-      );
-      setEnviando(false);
-      return;
-    }
-
-    // 3) Subir la foto de perfil (si el docente tomó/seleccionó una).
     let fotoUrl: string | null = null;
-    if (fotoBlob) {
+    if (fotoBlob && signUpData.session) {
       const ruta = `${userId}/perfil.jpg`;
       const { error: uploadError } = await supabase.storage
         .from("fotos-perfil")
@@ -89,31 +82,38 @@ export default function RegistroDocente() {
       }
     }
 
-    // 4) Crear el perfil (rol docente) y su fila específica en `docentes`.
-    const { error: perfilError } = await supabase.from("perfiles").insert({
-      id: userId,
-      rol: "docente",
-      institucion_id: form.institucionId,
-      nombre_completo: form.nombreCompleto,
-      numero_documento: form.numeroDocumento,
-      correo: form.correo,
-      telefono: form.telefono,
-      foto_url: fotoUrl,
-      codigo_aula360: generarCodigoDocente(),
+    const res = await fetch("/api/registro/completar-perfil", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        userId,
+        rolElegido: rol,
+        nombreCompleto: form.nombreCompleto,
+        numeroDocumento: form.numeroDocumento,
+        correo: form.correo,
+        telefono: form.telefono,
+        fotoUrl,
+        institucionId: form.institucionId,
+        areaPrincipal: form.areaPrincipal,
+        codigo: form.codigo,
+      }),
     });
+    const data = await res.json();
+    setEnviando(false);
 
-    if (perfilError) {
-      setError("Tu cuenta se creó, pero no pudimos guardar tu perfil: " + perfilError.message);
-      setEnviando(false);
+    if (!res.ok) {
+      setError(data.error ?? "No pudimos completar tu registro.");
       return;
     }
 
-    await supabase.from("docentes").insert({
-      perfil_id: userId,
-      area_principal: form.areaPrincipal,
-    });
+    if (!signUpData.session) {
+      setOk("Cuenta creada. Revisa tu correo para confirmar tu cuenta, luego inicia sesión.");
+      return;
+    }
 
-    router.push("/dashboard");
+    if (rol === "rector") router.push("/rector");
+    else if (rol === "coordinador") router.push("/saber11");
+    else router.push("/dashboard");
   }
 
   return (
@@ -122,8 +122,21 @@ export default function RegistroDocente() {
         <div className="flex flex-col items-center gap-2 mb-2">
           <Image src="/logo.png" alt="AULA360" width={64} height={64} />
           <h1 className="text-xl font-bold" style={{ color: "var(--a360-azul-oscuro)" }}>
-            Registro de docente
+            Crear cuenta
           </h1>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          {(["docente", "rector", "coordinador"] as Rol[]).map((r) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => setRol(r)}
+              className={`rounded-lg py-2 text-sm font-semibold border ${rol === r ? "a360-gradiente text-white border-transparent" : "text-gray-600"}`}
+            >
+              {r === "docente" ? "Docente" : r === "rector" ? "Rector" : "Coordinador"}
+            </button>
+          ))}
         </div>
 
         <FotoPerfil onFotoLista={(blob, preview) => { setFotoBlob(blob); setFotoPreview(preview); }} />
@@ -140,21 +153,28 @@ export default function RegistroDocente() {
         <input placeholder="Teléfono" className="border rounded-lg px-3 py-2 text-sm"
           value={form.telefono} onChange={(e) => actualizar("telefono", e.target.value)} />
 
-        <select required className="border rounded-lg px-3 py-2 text-sm" value={form.institucionId}
-          onChange={(e) => actualizar("institucionId", e.target.value)}>
-          <option value="">Selecciona tu institución</option>
-          {instituciones.map((i) => (
-            <option key={i.id} value={i.id}>{i.nombre}</option>
-          ))}
-        </select>
-        {instituciones.length === 0 && (
-          <p className="text-xs text-amber-600">
-            Todavía no hay instituciones registradas. Pide al SuperAdmin que registre tu institución primero.
-          </p>
+        {rol === "docente" ? (
+          <>
+            <select required className="border rounded-lg px-3 py-2 text-sm" value={form.institucionId}
+              onChange={(e) => actualizar("institucionId", e.target.value)}>
+              <option value="">Selecciona tu institución</option>
+              {instituciones.map((i) => (
+                <option key={i.id} value={i.id}>{i.nombre}</option>
+              ))}
+            </select>
+            {instituciones.length === 0 && (
+              <p className="text-xs text-amber-600">
+                Todavía no hay instituciones registradas. Pide al SuperAdmin que registre tu institución primero.
+              </p>
+            )}
+            <input placeholder="Área principal (ej. Ciencias Naturales)" className="border rounded-lg px-3 py-2 text-sm"
+              value={form.areaPrincipal} onChange={(e) => actualizar("areaPrincipal", e.target.value)} />
+          </>
+        ) : (
+          <input required placeholder={`Código de invitación de ${rol}`} className="border rounded-lg px-3 py-2 text-sm font-mono"
+            value={form.codigo} onChange={(e) => actualizar("codigo", e.target.value.toUpperCase())} />
         )}
 
-        <input placeholder="Área principal (ej. Ciencias Naturales)" className="border rounded-lg px-3 py-2 text-sm"
-          value={form.areaPrincipal} onChange={(e) => actualizar("areaPrincipal", e.target.value)} />
         <input required type="password" placeholder="Contraseña" minLength={6} className="border rounded-lg px-3 py-2 text-sm"
           value={form.password} onChange={(e) => actualizar("password", e.target.value)} />
 
