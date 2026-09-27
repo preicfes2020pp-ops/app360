@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Image from "next/image";
 import Link from "next/link";
@@ -6,9 +6,6 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import type { RolAula360 } from "@/lib/roles";
 
-// Regla heredada de LlévameQ: el Sidebar SOLO enlaza a páginas que ya
-// existen y funcionan. Nada de botones a secciones todavía no construidas.
-// Cada fase que agregue una página real, agrega aquí su enlace.
 const NAV_POR_ROL: Record<RolAula360, { href: string; label: string }[]> = {
   docente: [
     { href: "/dashboard", label: "Inicio" },
@@ -23,6 +20,7 @@ const NAV_POR_ROL: Record<RolAula360, { href: string; label: string }[]> = {
   rector: [
     { href: "/rector", label: "Inicio" },
     { href: "/rector/docentes", label: "Docentes" },
+    { href: "/rector/coordinadores", label: "Coordinadores" },
     { href: "/rector/grados", label: "Grados" },
     { href: "/rector/grupos", label: "Grupos" },
     { href: "/rector/areas", label: "Áreas y asignaturas" },
@@ -38,22 +36,32 @@ const NAV_POR_ROL: Record<RolAula360, { href: string; label: string }[]> = {
   superadmin: [
     { href: "/superadmin", label: "Inicio" },
     { href: "/superadmin/instituciones", label: "Instituciones" },
+    { href: "/superadmin/rectores", label: "Rectores" },
   ],
 };
 
-export default function Sidebar({
-  rol,
-  nombre,
-}: {
-  rol: RolAula360;
-  nombre: string;
-}) {
+export default function Sidebar({ rol, nombre }: { rol: RolAula360; nombre: string }) {
   const router = useRouter();
 
   async function cerrarSesion() {
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/login");
+  }
+
+  function renderLink(item: { href: string; label: string }) {
+    if (item.href === "/saber11") {
+      return (
+        <a key={item.href} href={item.href} className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-gray-100" style={{ color: "var(--a360-texto)" }}>
+          {item.label}
+        </a>
+      );
+    }
+    return (
+      <Link key={item.href} href={item.href} className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-gray-100" style={{ color: "var(--a360-texto)" }}>
+        {item.label}
+      </Link>
+    );
   }
 
   return (
@@ -66,38 +74,12 @@ export default function Sidebar({
           </span>
         </div>
         <nav className="flex flex-col gap-1 p-3">
-          {NAV_POR_ROL[rol].map((item) =>
-            item.href === "/saber11" ? (
-              // Enlace especial: fuerza una recarga completa de la página en
-              // vez de la navegación rápida de Next.js, para evitar quedarse
-              // con una versión vieja guardada en el navegador.
-              <a
-                key={item.href}
-                href={item.href}
-                className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-gray-100"
-                style={{ color: "var(--a360-texto)" }}
-              >
-                {item.label}
-              </a>
-            ) : (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="rounded-lg px-3 py-2 text-sm font-medium hover:bg-gray-100"
-                style={{ color: "var(--a360-texto)" }}
-              >
-                {item.label}
-              </Link>
-            )
-          )}
+          {NAV_POR_ROL[rol].map((item) => renderLink(item))}
         </nav>
       </div>
       <div className="p-3 border-t">
         <p className="text-xs text-gray-400 px-3 mb-2 truncate">{nombre}</p>
-        <button
-          onClick={cerrarSesion}
-          className="w-full text-left rounded-lg px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
-        >
+        <button onClick={cerrarSesion} className="w-full text-left rounded-lg px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50">
           Cerrar sesión
         </button>
       </div>
