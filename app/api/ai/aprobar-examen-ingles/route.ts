@@ -1,21 +1,27 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { verificarLimiteIA } from "@/lib/ai/limite-uso";
 import { generarExamenInglesGemini } from "@/lib/ai/gemini";
 import { PARTES_INGLES_ICFES } from "@/lib/ai/ingles-compartido";
 
 // POST /api/ai/aprobar-examen-ingles
-// A diferencia del examen genérico, el de inglés NO genera versiones B/C
-// al aprobar: barajar preguntas rompería la correspondencia entre los
+// A diferencia del examen generico, el de ingles NO genera versiones B/C
+// al aprobar: barajar preguntas romperia la correspondencia entre los
 // espacios numerados del texto (partes 4 y 7) y sus preguntas, y el banco
-// compartido de la parte 2. Queda como mejora simplificada — documentada
+// compartido de la parte 2. Queda como mejora simplificada - documentada
 // en PROGRESO_AULA360.md.
 export async function POST(req: NextRequest) {
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado." }, { status: 401 });
 
+  const limite = await verificarLimiteIA(supabase, user.id);
+  if (!limite.permitido) {
+    return NextResponse.json({ error: limite.mensaje }, { status: 429 });
+  }
+
   const { data: perfil } = await supabase.from("perfiles").select("rol").eq("id", user.id).single();
-  if (!perfil || perfil.rol !== "docente") return NextResponse.json({ error: "Solo un docente puede aprobar exámenes." }, { status: 403 });
+  if (!perfil || perfil.rol !== "docente") return NextResponse.json({ error: "Solo un docente puede aprobar examenes." }, { status: 403 });
 
   const { examenId, aprobado, instrucciones } = await req.json();
   if (!examenId) return NextResponse.json({ error: "Falta examenId." }, { status: 400 });
@@ -32,7 +38,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, estado: "aprobado" });
   }
 
-  if (!instrucciones?.trim()) return NextResponse.json({ error: "Indica qué deseas mejorar." }, { status: 400 });
+  if (!instrucciones?.trim()) return NextResponse.json({ error: "Indica que deseas mejorar." }, { status: 400 });
 
   const { data: asignacion } = await supabase
     .from("asignaciones_docente").select("area_id, grado_id").eq("id", examen.asignacion_id).single();
@@ -49,9 +55,9 @@ export async function POST(req: NextRequest) {
         filasPreguntas.push({
           institucion_id: examen.institucion_id, docente_id: user.id,
           area_id: asignacion?.area_id, grado_id: asignacion?.grado_id,
-          tema: examen.tema, competencia: `Parte ${spec.numero} — ${spec.titulo} (MCER ${spec.nivelCEFR})`,
+          tema: examen.tema, competencia: `Parte ${spec.numero} - ${spec.titulo} (MCER ${spec.nivelCEFR})`,
           tipo_texto: "continuo",
-          contexto: spec.tieneTextoBase ? parte.textoBase : (spec.numero === 2 ? "Vocabulario — banco de opciones compartido de la Parte 2." : ""),
+          contexto: spec.tieneTextoBase ? parte.textoBase : (spec.numero === 2 ? "Vocabulario - banco de opciones compartido de la Parte 2." : ""),
           enunciado, opciones, respuesta_correcta: p.respuestaCorrecta, explicacion: p.explicacion,
           nivel_dificultad: spec.nivelCEFR === "B1" ? "avanzado" : spec.nivelCEFR === "A2" ? "intermedio" : "basico",
           irt_dificultad: p.irtDificultad, irt_discriminacion: p.irtDiscriminacion, irt_adivinacion: p.irtAdivinacion,

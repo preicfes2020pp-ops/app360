@@ -1,19 +1,25 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { verificarLimiteIA } from "@/lib/ai/limite-uso";
 // Ver nota en app/api/ai/generar-clase/route.ts sobre este cambio temporal a Gemini.
 import { generarClaseGemini as generarClase } from "@/lib/ai/gemini";
 import type { ContextoGeneracion } from "@/lib/ai/tipos";
 
 // POST /api/ai/aprobar
-// Implementa el flujo obligatorio de la sección 3:
-// - aprobado=true  -> marca la generación como aprobada, tal cual está.
-// - aprobado=false -> el docente debe indicar QUÉ mejorar; la IA
-//   regenera teniendo en cuenta esa instrucción, y se guarda en el
-//   historial (nunca se pierde la versión anterior).
+// Implementa el flujo obligatorio de la seccion 3:
+// - aprobado=true  -> marca la generacion como aprobada, tal cual esta.
+// - aprobado=false -> el docente debe indicar QUE mejorar; la IA
+//   regenera teniendo en cuenta esa instruccion, y se guarda en el
+//   historial (nunca se pierde la version anterior).
 export async function POST(req: NextRequest) {
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado." }, { status: 401 });
+
+  const limite = await verificarLimiteIA(supabase, user.id);
+  if (!limite.permitido) {
+    return NextResponse.json({ error: limite.mensaje }, { status: 429 });
+  }
 
   const { data: perfil } = await supabase.from("perfiles").select("rol").eq("id", user.id).single();
   if (!perfil || perfil.rol !== "docente") return NextResponse.json({ error: "Solo un docente puede aprobar generaciones." }, { status: 403 });
@@ -26,7 +32,7 @@ export async function POST(req: NextRequest) {
     .select("id, docente_id, contenido, historial, tema, tiempo_clase_minutos, nivel_dificultad, asignaciones_docente(grados(nombre), grupos(nombre), areas(nombre), asignaturas(nombre))")
     .eq("id", generacionId).eq("docente_id", user.id).single();
 
-  if (!generacion) return NextResponse.json({ error: "Generación no encontrada." }, { status: 404 });
+  if (!generacion) return NextResponse.json({ error: "Generacion no encontrada." }, { status: 404 });
 
   if (aprobado) {
     const { error } = await supabase.from("ai_generaciones").update({ estado: "aprobado", actualizado_en: new Date().toISOString() }).eq("id", generacionId);
@@ -35,7 +41,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (!instruccionesMejora?.trim()) {
-    return NextResponse.json({ error: "Indica qué deseas mejorar." }, { status: 400 });
+    return NextResponse.json({ error: "Indica que deseas mejorar." }, { status: 400 });
   }
 
   const asig: any = generacion.asignaciones_docente;

@@ -1,18 +1,24 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { verificarLimiteIA } from "@/lib/ai/limite-uso";
 // Usando Gemini temporalmente (ver nota en app/api/ai/generar-examen/route.ts).
 // Para volver a Anthropic: import { generarClase } from "@/lib/ai/anthropic";
 import { generarClaseGemini as generarClase } from "@/lib/ai/gemini";
 import type { ContextoGeneracion } from "@/lib/ai/tipos";
 
 // POST /api/ai/generar-clase
-// Genera una clase nueva (planeación + 3 actividades + tarea + refuerzo)
-// a partir de una asignación real del docente autenticado, y la guarda
-// como "pendiente_aprobacion" (sección 3: nada se usa sin aprobación).
+// Genera una clase nueva (planeacion + 3 actividades + tarea + refuerzo)
+// a partir de una asignacion real del docente autenticado, y la guarda
+// como "pendiente_aprobacion" (seccion 3: nada se usa sin aprobacion).
 export async function POST(req: NextRequest) {
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado." }, { status: 401 });
+
+  const limite = await verificarLimiteIA(supabase, user.id);
+  if (!limite.permitido) {
+    return NextResponse.json({ error: limite.mensaje }, { status: 429 });
+  }
 
   const { data: perfil } = await supabase.from("perfiles").select("rol, institucion_id").eq("id", user.id).single();
   if (!perfil || perfil.rol !== "docente") return NextResponse.json({ error: "Solo un docente puede generar clases." }, { status: 403 });
@@ -23,16 +29,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Faltan datos: asignacionId, tema, tiempoClaseMinutos, nivelDificultad." }, { status: 400 });
   }
 
-  // La asignación debe pertenecer al docente autenticado (RLS ya lo exige,
-  // pero validamos explícito para dar un error claro).
+  // La asignacion debe pertenecer al docente autenticado (RLS ya lo exige,
+  // pero validamos explicito para dar un error claro).
   const { data: asignacion } = await supabase
     .from("asignaciones_docente")
     .select("id, grados(nombre), grupos(nombre), areas(nombre, id), asignaturas(nombre)")
     .eq("id", asignacionId).eq("docente_id", user.id).single();
 
-  if (!asignacion) return NextResponse.json({ error: "Esa asignación no existe o no te pertenece." }, { status: 404 });
+  if (!asignacion) return NextResponse.json({ error: "Esa asignacion no existe o no te pertenece." }, { status: 404 });
 
-  // Contexto adicional: el plan de área más reciente del docente para esa área/grado, si existe (Fase 2).
+  // Contexto adicional: el plan de area mas reciente del docente para esa area/grado, si existe (Fase 2).
   const { data: plan } = await supabase
     .from("area_plans")
     .select("competencias, estandares, temas")
@@ -65,7 +71,7 @@ export async function POST(req: NextRequest) {
       .select("id, contenido, estado")
       .single();
 
-    if (error || !guardado) return NextResponse.json({ error: error?.message ?? "No se pudo guardar la generación." }, { status: 500 });
+    if (error || !guardado) return NextResponse.json({ error: error?.message ?? "No se pudo guardar la generacion." }, { status: 500 });
     return NextResponse.json(guardado);
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 502 });

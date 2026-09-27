@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { verificarLimiteIA } from "@/lib/ai/limite-uso";
 import { leerHojaRespuestasGemini } from "@/lib/ai/gemini";
 
 const MAX_TAMANO_BYTES = 10 * 1024 * 1024; // 10 MB (una foto de celular cabe de sobra)
@@ -22,6 +23,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No autenticado." }, { status: 401 });
   }
 
+  const limite = await verificarLimiteIA(supabase, user.id);
+  if (!limite.permitido) {
+    return NextResponse.json({ error: limite.mensaje }, { status: 429 });
+  }
+
   const { data: perfil } = await supabase
     .from("perfiles")
     .select("rol")
@@ -29,7 +35,7 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (!perfil || !["docente", "rector", "coordinador", "superadmin"].includes(perfil.rol)) {
-    return NextResponse.json({ error: "No tienes permiso para calificar exámenes." }, { status: 403 });
+    return NextResponse.json({ error: "No tienes permiso para calificar examenes." }, { status: 403 });
   }
 
   const formData = await request.formData();
@@ -41,7 +47,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Falta el examen o el estudiante." }, { status: 400 });
   }
   if (!(archivo instanceof File)) {
-    return NextResponse.json({ error: "No se recibió ningún archivo." }, { status: 400 });
+    return NextResponse.json({ error: "No se recibio ningun archivo." }, { status: 400 });
   }
   if (!TIPOS_PERMITIDOS.has(archivo.type)) {
     return NextResponse.json(
@@ -50,12 +56,12 @@ export async function POST(request: NextRequest) {
     );
   }
   if (archivo.size > MAX_TAMANO_BYTES) {
-    return NextResponse.json({ error: "El archivo pesa más de 10 MB." }, { status: 400 });
+    return NextResponse.json({ error: "El archivo pesa mas de 10 MB." }, { status: 400 });
   }
 
   // El examen debe existir y ser del docente autenticado (o de su
-  // institución si es rector/coordinador). La RLS de "examenes" ya lo
-  // filtra automáticamente al usar el cliente autenticado del usuario.
+  // institucion si es rector/coordinador). La RLS de "examenes" ya lo
+  // filtra automaticamente al usar el cliente autenticado del usuario.
   const { data: itemsExamen, error: errorItems } = await supabase
     .from("examen_preguntas")
     .select("orden, preguntas(respuesta_correcta)")
@@ -64,7 +70,7 @@ export async function POST(request: NextRequest) {
 
   if (errorItems || !itemsExamen || itemsExamen.length === 0) {
     return NextResponse.json(
-      { error: "No se encontró el examen, o no tienes permiso sobre él." },
+      { error: "No se encontro el examen, o no tienes permiso sobre el." },
       { status: 404 }
     );
   }
@@ -150,7 +156,7 @@ export async function POST(request: NextRequest) {
 
   if (errorGuardado) {
     return NextResponse.json(
-      { error: `No se pudo registrar la calificación: ${errorGuardado.message}` },
+      { error: `No se pudo registrar la calificacion: ${errorGuardado.message}` },
       { status: 400 }
     );
   }

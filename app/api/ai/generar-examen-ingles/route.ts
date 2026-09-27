@@ -1,22 +1,28 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { verificarLimiteIA } from "@/lib/ai/limite-uso";
 import { generarExamenInglesGemini } from "@/lib/ai/gemini";
 import { PARTES_INGLES_ICFES } from "@/lib/ai/ingles-compartido";
 
 // POST /api/ai/generar-examen-ingles
-// Genera el examen COMPLETO de inglés (45 preguntas, 7 partes oficiales
+// Genera el examen COMPLETO de ingles (45 preguntas, 7 partes oficiales
 // del ICFES) en una sola llamada, y lo aplana en filas de `preguntas`
 // (una por pregunta) + `examen_preguntas` (orden 1-45 continuo). El orden
-// de cada parte es siempre el mismo (fijo, oficial), así que no hace
-// falta guardar a qué parte pertenece cada fila: se reconstruye por
-// posición usando PARTES_INGLES_ICFES en el momento de imprimir.
+// de cada parte es siempre el mismo (fijo, oficial), asi que no hace
+// falta guardar a que parte pertenece cada fila: se reconstruye por
+// posicion usando PARTES_INGLES_ICFES en el momento de imprimir.
 export async function POST(req: NextRequest) {
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado." }, { status: 401 });
 
+  const limite = await verificarLimiteIA(supabase, user.id);
+  if (!limite.permitido) {
+    return NextResponse.json({ error: limite.mensaje }, { status: 429 });
+  }
+
   const { data: perfil } = await supabase.from("perfiles").select("rol, institucion_id").eq("id", user.id).single();
-  if (!perfil || perfil.rol !== "docente") return NextResponse.json({ error: "Solo un docente puede generar exámenes." }, { status: 403 });
+  if (!perfil || perfil.rol !== "docente") return NextResponse.json({ error: "Solo un docente puede generar examenes." }, { status: 403 });
 
   const { asignacionId, tema } = await req.json();
   if (!asignacionId || !tema) return NextResponse.json({ error: "Faltan datos: asignacionId, tema." }, { status: 400 });
@@ -25,7 +31,7 @@ export async function POST(req: NextRequest) {
     .from("asignaciones_docente")
     .select("id, grado_id, area_id")
     .eq("id", asignacionId).eq("docente_id", user.id).single();
-  if (!asignacion) return NextResponse.json({ error: "Esa asignación no existe o no te pertenece." }, { status: 404 });
+  if (!asignacion) return NextResponse.json({ error: "Esa asignacion no existe o no te pertenece." }, { status: 404 });
 
   try {
     const examenIA = await generarExamenInglesGemini(tema);
@@ -45,9 +51,9 @@ export async function POST(req: NextRequest) {
           area_id: asignacion.area_id,
           grado_id: asignacion.grado_id,
           tema,
-          competencia: `Parte ${spec.numero} — ${spec.titulo} (MCER ${spec.nivelCEFR})`,
+          competencia: `Parte ${spec.numero} - ${spec.titulo} (MCER ${spec.nivelCEFR})`,
           tipo_texto: "continuo",
-          contexto: spec.tieneTextoBase ? parte.textoBase : (spec.numero === 2 ? "Vocabulario — banco de opciones compartido de la Parte 2." : ""),
+          contexto: spec.tieneTextoBase ? parte.textoBase : (spec.numero === 2 ? "Vocabulario - banco de opciones compartido de la Parte 2." : ""),
           enunciado,
           opciones,
           respuesta_correcta: p.respuestaCorrecta,

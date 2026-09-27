@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { verificarLimiteIA } from "@/lib/ai/limite-uso";
 // Ver nota en app/api/ai/generar-examen/route.ts sobre este cambio temporal a Gemini.
 import { generarPreguntasExamenGemini as generarPreguntasExamen } from "@/lib/ai/gemini";
 import { generarImagenPregunta } from "@/lib/generarImagenPregunta";
@@ -7,20 +8,25 @@ import { barajarOrdenPreguntas } from "@/lib/barajarOrdenPreguntas";
 import type { ContextoExamen } from "@/lib/ai/tipos";
 
 // POST /api/ai/aprobar-examen
-// aprobado=true  -> marca la versión A como aprobada y crea las versiones
+// aprobado=true  -> marca la version A como aprobada y crea las versiones
 //   B y C (nuevas filas en `examenes`, mismas preguntas pero en otro orden
-//   — ver lib/barajarOrdenPreguntas.ts sobre el alcance de esta mezcla).
+//   - ver lib/barajarOrdenPreguntas.ts sobre el alcance de esta mezcla).
 // aprobado=false -> descarta las preguntas de este intento (quedan en el
-//   banco por si sirven después) y genera un juego nuevo; no hay columna
-//   de historial en `examenes`, así que no se conserva el intento anterior,
-//   solo cuenta cuántos intentos ha llevado en `intentos_validacion`.
+//   banco por si sirven despues) y genera un juego nuevo; no hay columna
+//   de historial en `examenes`, asi que no se conserva el intento anterior,
+//   solo cuenta cuantos intentos ha llevado en `intentos_validacion`.
 export async function POST(req: NextRequest) {
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado." }, { status: 401 });
 
+  const limite = await verificarLimiteIA(supabase, user.id);
+  if (!limite.permitido) {
+    return NextResponse.json({ error: limite.mensaje }, { status: 429 });
+  }
+
   const { data: perfil } = await supabase.from("perfiles").select("rol").eq("id", user.id).single();
-  if (!perfil || perfil.rol !== "docente") return NextResponse.json({ error: "Solo un docente puede aprobar exámenes." }, { status: 403 });
+  if (!perfil || perfil.rol !== "docente") return NextResponse.json({ error: "Solo un docente puede aprobar examenes." }, { status: 403 });
 
   const { examenId, aprobado, instrucciones } = await req.json();
   if (!examenId) return NextResponse.json({ error: "Falta examenId." }, { status: 400 });
@@ -30,7 +36,7 @@ export async function POST(req: NextRequest) {
     .select("id, docente_id, institucion_id, asignacion_id, tema, version, tipo, estado, intentos_validacion")
     .eq("id", examenId).eq("docente_id", user.id).single();
   if (!examen) return NextResponse.json({ error: "Examen no encontrado." }, { status: 404 });
-  if (examen.version !== "A") return NextResponse.json({ error: "Solo la versión A se aprueba o regenera directamente." }, { status: 400 });
+  if (examen.version !== "A") return NextResponse.json({ error: "Solo la version A se aprueba o regenera directamente." }, { status: 400 });
 
   const { data: vinculos } = await supabase
     .from("examen_preguntas")
@@ -53,18 +59,18 @@ export async function POST(req: NextRequest) {
           tema: examen.tema, version: letra, tipo: examen.tipo, estado: "aprobado", intentos_validacion: 1,
         })
         .select("id").single();
-      if (errorVersion || !nuevaVersion) return NextResponse.json({ error: `No se pudo crear la versión ${letra}: ${errorVersion?.message}` }, { status: 500 });
+      if (errorVersion || !nuevaVersion) return NextResponse.json({ error: `No se pudo crear la version ${letra}: ${errorVersion?.message}` }, { status: 500 });
 
       const ordenBarajado = barajarOrdenPreguntas(preguntaIds, examenId, letra);
       const filas = ordenBarajado.map((preguntaId, idx) => ({ examen_id: nuevaVersion.id, pregunta_id: preguntaId, orden: idx + 1 }));
       const { error: errorLink } = await supabase.from("examen_preguntas").insert(filas);
-      if (errorLink) return NextResponse.json({ error: `No se pudo enlazar la versión ${letra}: ${errorLink.message}` }, { status: 500 });
+      if (errorLink) return NextResponse.json({ error: `No se pudo enlazar la version ${letra}: ${errorLink.message}` }, { status: 500 });
     }
 
     return NextResponse.json({ ok: true, estado: "aprobado" });
   }
 
-  if (!instrucciones?.trim()) return NextResponse.json({ error: "Indica qué deseas mejorar." }, { status: 400 });
+  if (!instrucciones?.trim()) return NextResponse.json({ error: "Indica que deseas mejorar." }, { status: 400 });
 
   const { data: asignacion } = await supabase
     .from("asignaciones_docente")

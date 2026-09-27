@@ -1,18 +1,24 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { verificarLimiteIA } from "@/lib/ai/limite-uso";
 import { generarImagen } from "@/lib/ai/gemini";
 
 // POST /api/ai/generar-imagen
 // Genera una imagen de apoyo (Gemini) para una actividad y la sube a
-// Storage. Devuelve la URL pública. Proveedor intercambiable: ver
-// lib/ai/gemini.ts — el resto de la app no sabe qué proveedor se usa.
+// Storage. Devuelve la URL publica. Proveedor intercambiable: ver
+// lib/ai/gemini.ts - el resto de la app no sabe que proveedor se usa.
 export async function POST(req: NextRequest) {
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado." }, { status: 401 });
 
+  const limite = await verificarLimiteIA(supabase, user.id);
+  if (!limite.permitido) {
+    return NextResponse.json({ error: limite.mensaje }, { status: 429 });
+  }
+
   const { descripcion } = await req.json();
-  if (!descripcion) return NextResponse.json({ error: "Falta la descripción de la imagen." }, { status: 400 });
+  if (!descripcion) return NextResponse.json({ error: "Falta la descripcion de la imagen." }, { status: 400 });
 
   try {
     const buffer = await generarImagen(descripcion);

@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { verificarLimiteIA } from "@/lib/ai/limite-uso";
 // Usando Gemini temporalmente (tiene nivel gratuito) mientras se carga
 // saldo en Anthropic. Para volver a Anthropic: cambia este import por
-// `import { generarPreguntasExamen } from "@/lib/ai/anthropic";` — misma
-// firma, no hay que tocar nada más en este archivo.
+// `import { generarPreguntasExamen } from "@/lib/ai/anthropic";` - misma
+// firma, no hay que tocar nada mas en este archivo.
 import { generarPreguntasExamenGemini as generarPreguntasExamen } from "@/lib/ai/gemini";
 import { generarImagenPregunta } from "@/lib/generarImagenPregunta";
 import type { ContextoExamen } from "@/lib/ai/tipos";
@@ -11,31 +12,36 @@ import type { ContextoExamen } from "@/lib/ai/tipos";
 // POST /api/ai/generar-examen
 // Genera un examen tipo ICFES contra el esquema REAL del proyecto:
 // - Cada pregunta se guarda como una fila en `preguntas` (banco reutilizable,
-//   con soporte para calibración IRT a futuro).
+//   con soporte para calibracion IRT a futuro).
 // - El examen es una fila en `examenes` (version "A", estado
-//   pendiente_aprobacion — sección 3: nada se usa sin aprobación).
+//   pendiente_aprobacion - seccion 3: nada se usa sin aprobacion).
 // - `examen_preguntas` enlaza el examen con sus preguntas, en orden.
 export async function POST(req: NextRequest) {
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado." }, { status: 401 });
 
+  const limite = await verificarLimiteIA(supabase, user.id);
+  if (!limite.permitido) {
+    return NextResponse.json({ error: limite.mensaje }, { status: 429 });
+  }
+
   const { data: perfil } = await supabase.from("perfiles").select("rol, institucion_id").eq("id", user.id).single();
-  if (!perfil || perfil.rol !== "docente") return NextResponse.json({ error: "Solo un docente puede generar exámenes." }, { status: 403 });
+  if (!perfil || perfil.rol !== "docente") return NextResponse.json({ error: "Solo un docente puede generar examenes." }, { status: 403 });
 
   const { asignacionId, tema, numeroItems, nivelDificultad } = await req.json();
   if (!asignacionId || !tema || !numeroItems || !nivelDificultad) {
     return NextResponse.json({ error: "Faltan datos: asignacionId, tema, numeroItems, nivelDificultad." }, { status: 400 });
   }
   if (numeroItems < 20) {
-    return NextResponse.json({ error: "El examen debe tener al menos 20 preguntas, como los exámenes tipo ICFES reales." }, { status: 400 });
+    return NextResponse.json({ error: "El examen debe tener al menos 20 preguntas, como los examenes tipo ICFES reales." }, { status: 400 });
   }
 
   const { data: asignacion } = await supabase
     .from("asignaciones_docente")
     .select("id, grado_id, area_id, grados(nombre), grupos(nombre), areas(nombre), asignaturas(nombre)")
     .eq("id", asignacionId).eq("docente_id", user.id).single();
-  if (!asignacion) return NextResponse.json({ error: "Esa asignación no existe o no te pertenece." }, { status: 404 });
+  if (!asignacion) return NextResponse.json({ error: "Esa asignacion no existe o no te pertenece." }, { status: 404 });
 
   const ctx: ContextoExamen = {
     tema,
@@ -50,7 +56,7 @@ export async function POST(req: NextRequest) {
   try {
     const { preguntas, intentos } = await generarPreguntasExamen(ctx, numeroItems);
 
-    // Preguntas "discontinuas" -> se les genera una imagen real (tabla/gráfico)
+    // Preguntas "discontinuas" -> se les genera una imagen real (tabla/grafico)
     // con Gemini, en vez de solo describirla en palabras dentro del contexto.
     const imagenesPorIndice: Record<number, { ruta: string; urlFirmada: string }> = {};
     await Promise.all(
