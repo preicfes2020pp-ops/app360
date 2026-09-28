@@ -10,7 +10,7 @@ export default async function RectoresSuperadmin() {
   const { data: perfil } = await supabase.from("perfiles").select("rol, nombre_completo").eq("id", user.id).single();
   if (!perfil || perfil.rol !== "superadmin") redirect("/login");
 
-  const { data: instituciones } = await supabase.from("instituciones").select("id, nombre").order("nombre");
+  const { data: instituciones } = await supabase.from("instituciones").select("id, nombre, municipio").order("nombre");
   const { data: rectores } = await supabase
     .from("perfiles")
     .select("id, nombre_completo, correo, instituciones(nombre)")
