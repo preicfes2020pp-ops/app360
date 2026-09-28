@@ -1,12 +1,12 @@
 ﻿"use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase";
 import FotoPerfil from "@/app/components/FotoPerfil";
 
-type Institucion = { id: string; nombre: string };
+type Institucion = { id: string; nombre: string; municipio: string };
 type Rol = "docente" | "rector" | "coordinador";
 
 export default function RegistroDocente() {
@@ -14,7 +14,9 @@ export default function RegistroDocente() {
   const supabase = createClient();
 
   const [instituciones, setInstituciones] = useState<Institucion[]>([]);
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
   const [rol, setRol] = useState<Rol>("docente");
+  const [municipio, setMunicipio] = useState("");
   const [form, setForm] = useState({
     nombreCompleto: "",
     numeroDocumento: "",
@@ -34,11 +36,27 @@ export default function RegistroDocente() {
   useEffect(() => {
     supabase
       .from("instituciones")
-      .select("id, nombre")
+      .select("id, nombre, municipio")
       .eq("activa", true)
+      .not("municipio", "is", null)
       .order("nombre")
-      .then(({ data }) => setInstituciones(data ?? []));
+      .then(({ data, error: errorConsulta }) => {
+        if (errorConsulta) {
+          setErrorCarga("No pudimos cargar las instituciones. Revisa tu conexión y recarga la página.");
+          return;
+        }
+        setInstituciones((data ?? []) as Institucion[]);
+      });
   }, [supabase]);
+
+  const municipios = useMemo(
+    () => Array.from(new Set(instituciones.map((i) => i.municipio))).sort((a, b) => a.localeCompare(b, "es")),
+    [instituciones]
+  );
+  const institucionesDelMunicipio = useMemo(
+    () => instituciones.filter((i) => i.municipio === municipio),
+    [instituciones, municipio]
+  );
 
   function actualizar<K extends keyof typeof form>(campo: K, valor: string) {
     setForm((f) => ({ ...f, [campo]: valor }));
@@ -50,7 +68,7 @@ export default function RegistroDocente() {
     setOk(null);
 
     if (rol === "docente" && !form.institucionId) {
-      setError("Selecciona tu institución.");
+      setError("Selecciona tu municipio y tu institución.");
       return;
     }
     if (rol !== "docente" && !form.codigo.trim()) {
@@ -155,14 +173,22 @@ export default function RegistroDocente() {
 
         {rol === "docente" ? (
           <>
-            <select required className="border rounded-lg px-3 py-2 text-sm" value={form.institucionId}
-              onChange={(e) => actualizar("institucionId", e.target.value)}>
-              <option value="">Selecciona tu institución</option>
-              {instituciones.map((i) => (
+            <select required className="border rounded-lg px-3 py-2 text-sm" value={municipio}
+              onChange={(e) => { setMunicipio(e.target.value); actualizar("institucionId", ""); }}>
+              <option value="">Selecciona tu municipio</option>
+              {municipios.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+            <select required disabled={!municipio} className="border rounded-lg px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-400"
+              value={form.institucionId} onChange={(e) => actualizar("institucionId", e.target.value)}>
+              <option value="">{municipio ? "Selecciona tu institución" : "Primero elige el municipio"}</option>
+              {institucionesDelMunicipio.map((i) => (
                 <option key={i.id} value={i.id}>{i.nombre}</option>
               ))}
             </select>
-            {instituciones.length === 0 && (
+            {errorCarga && <p className="text-xs text-red-600">{errorCarga}</p>}
+            {!errorCarga && instituciones.length === 0 && (
               <p className="text-xs text-amber-600">
                 Todavía no hay instituciones registradas. Pide al SuperAdmin que registre tu institución primero.
               </p>
