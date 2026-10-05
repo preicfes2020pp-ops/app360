@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase";
 import FotoPerfil from "@/app/components/FotoPerfil";
 
@@ -42,7 +43,7 @@ export default function RegistroDocente() {
       .order("nombre")
       .then(({ data, error: errorConsulta }) => {
         if (errorConsulta) {
-          setErrorCarga("No pudimos cargar las instituciones. Revisa tu conexión y recarga la página.");
+          setErrorCarga("No pudimos cargar las instituciones. Revisa tu conexion y recarga la pagina.");
           return;
         }
         setInstituciones((data ?? []) as Institucion[]);
@@ -68,11 +69,11 @@ export default function RegistroDocente() {
     setOk(null);
 
     if (rol === "docente" && !form.institucionId) {
-      setError("Selecciona tu municipio y tu institución.");
+      setError("Selecciona tu municipio y tu institucion.");
       return;
     }
     if (rol !== "docente" && !form.codigo.trim()) {
-      setError("Escribe el código de invitación que te dieron.");
+      setError("Escribe el codigo de invitacion que te dieron.");
       return;
     }
     setEnviando(true);
@@ -125,13 +126,32 @@ export default function RegistroDocente() {
     }
 
     if (!signUpData.session) {
-      setOk("Cuenta creada. Revisa tu correo para confirmar tu cuenta, luego inicia sesión.");
+      setOk("ok");
       return;
     }
 
     if (rol === "rector") router.push("/rector");
     else if (rol === "coordinador") router.push("/saber11");
     else router.push("/dashboard");
+  }
+
+  if (ok) {
+    return (
+      <main className="min-h-screen flex items-center justify-center px-6 py-10" style={{ background: "var(--a360-fondo)" }}>
+        <div className="bg-white w-full max-w-md rounded-2xl shadow-lg p-8 flex flex-col gap-4 items-center text-center">
+          <Image src="/logo.png" alt="AULA360" width={64} height={64} />
+          <h1 className="text-xl font-bold" style={{ color: "var(--a360-azul-oscuro)" }}>
+            Cuenta creada
+          </h1>
+          <p className="text-sm" style={{ color: "var(--a360-texto)" }}>
+            Revisa tu correo y confirma tu cuenta antes de iniciar sesion. Si no lo ves en la bandeja de entrada, revisa spam.
+          </p>
+          <Link href="/login" className="a360-gradiente text-white font-semibold rounded-lg py-2 px-6 w-full">
+            Ir a iniciar sesion
+          </Link>
+        </div>
+      </main>
+    );
   }
 
   return (
@@ -205,7 +225,6 @@ export default function RegistroDocente() {
           value={form.password} onChange={(e) => actualizar("password", e.target.value)} />
 
         {error && <p className="text-sm text-red-600">{error}</p>}
-        {ok && <p className="text-sm text-green-600">{ok}</p>}
 
         <button type="submit" disabled={enviando} className="a360-gradiente text-white font-semibold rounded-lg py-2 disabled:opacity-60">
           {enviando ? "Creando cuenta..." : "Crear mi cuenta"}
