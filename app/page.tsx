@@ -54,14 +54,10 @@ export default function PaginaInicio() {
             </div>
           </div>
 
-          <div className="relative rounded-3xl p-10 a360-gradiente text-white flex flex-col items-center justify-center text-center min-h-[320px]">
-            <p className="italic text-lg mb-2">"Mejores decisiones,</p>
-            <p className="italic text-lg mb-6">mejores resultados"</p>
-            <svg width="90" height="90" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5">
-              <path d="M22 10L12 5 2 10l10 5 10-5Z" />
-              <path d="M6 12v5c0 1.5 2.7 3 6 3s6-1.5 6-3v-5" />
-            </svg>
-            <div className="absolute bottom-4 right-4 bg-white/15 backdrop-blur rounded-xl px-4 py-2 text-sm font-semibold">
+          <div className="relative rounded-3xl overflow-hidden min-h-[320px]">
+            <Image src="/estudiantes-hero.jpg" alt="Estudiantes usando AULA360" fill style={{ objectFit: "cover" }} />
+            <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(11,36,71,0) 40%, rgba(11,36,71,0.55) 100%)" }} />
+            <div className="absolute bottom-4 right-4 bg-white/90 backdrop-blur rounded-xl px-4 py-2 text-sm font-semibold" style={{ color: "var(--a360-azul-oscuro)" }}>
               🎓 Educación sin límites
             </div>
           </div>
