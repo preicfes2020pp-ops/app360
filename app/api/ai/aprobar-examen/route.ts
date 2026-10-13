@@ -1,16 +1,19 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { createAdminSupabaseClient } from "@/lib/supabase-admin";
 import { verificarLimiteIA } from "@/lib/ai/limite-uso";
 // Ver nota en app/api/ai/generar-examen/route.ts sobre este cambio temporal a Gemini.
 import { generarPreguntasExamenGemini as generarPreguntasExamen } from "@/lib/ai/gemini";
 import { generarImagenPregunta } from "@/lib/generarImagenPregunta";
 import { barajarOrdenPreguntas } from "@/lib/barajarOrdenPreguntas";
+import { numeroDeGrado } from "@/lib/banco/grado";
+import { aportarPreguntasAlBanco } from "@/lib/banco/aportar";
 import type { ContextoExamen } from "@/lib/ai/tipos";
 
 // POST /api/ai/aprobar-examen
-// aprobado=true  -> marca la version A como aprobada y crea las versiones
-//   B y C (nuevas filas en `examenes`, mismas preguntas pero en otro orden
-//   - ver lib/barajarOrdenPreguntas.ts sobre el alcance de esta mezcla).
+// aprobado=true  -> marca la version A como aprobada, crea las versiones B y C
+//   (mismas preguntas en otro orden) y aporta las preguntas nuevas al banco
+//   compartido como "sin_revisar".
 // aprobado=false -> descarta las preguntas de este intento (quedan en el
 //   banco por si sirven despues) y genera un juego nuevo; no hay columna
 //   de historial en `examenes`, asi que no se conserva el intento anterior,
@@ -19,11 +22,6 @@ export async function POST(req: NextRequest) {
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado." }, { status: 401 });
-
-  const limite = await verificarLimiteIA(supabase, user.id);
-  if (!limite.permitido) {
-    return NextResponse.json({ error: limite.mensaje }, { status: 429 });
-  }
 
   const { data: perfil } = await supabase.from("perfiles").select("rol").eq("id", user.id).single();
   if (!perfil || perfil.rol !== "docente") return NextResponse.json({ error: "Solo un docente puede aprobar examenes." }, { status: 403 });
@@ -40,7 +38,7 @@ export async function POST(req: NextRequest) {
 
   const { data: vinculos } = await supabase
     .from("examen_preguntas")
-    .select("orden, preguntas(id, tema, competencia, tipo_texto, contexto, enunciado, opciones, respuesta_correcta, explicacion, nivel_dificultad, area_id, grado_id, institucion_id, docente_id)")
+    .select("orden, preguntas(id, tema, competencia, tipo_texto, contexto, enunciado, opciones, respuesta_correcta, explicacion, nivel_dificultad, area_id, grado_id, institucion_id, docente_id, irt_dificultad, irt_discriminacion, irt_adivinacion, imagen_url, banco_pregunta_id)")
     .eq("examen_id", examenId)
     .order("orden");
   const preguntasActuales = (vinculos ?? []).map((v: any) => v.preguntas);
@@ -67,10 +65,36 @@ export async function POST(req: NextRequest) {
       if (errorLink) return NextResponse.json({ error: `No se pudo enlazar la version ${letra}: ${errorLink.message}` }, { status: 500 });
     }
 
+    // Aporta al banco compartido las preguntas nuevas de este examen (nunca bloquea la aprobacion)
+    try {
+      const { data: asignacionBanco } = await supabase
+        .from("asignaciones_docente")
+        .select("grados(nombre), asignaturas(catalogo_asignatura_id)")
+        .eq("id", examen.asignacion_id).single();
+      const catalogoAsignaturaId: string | null = (asignacionBanco as any)?.asignaturas?.catalogo_asignatura_id ?? null;
+      const gradoNumero = numeroDeGrado((asignacionBanco as any)?.grados?.nombre ?? "");
+      if (catalogoAsignaturaId && gradoNumero !== null) {
+        await aportarPreguntasAlBanco(createAdminSupabaseClient(), {
+          docenteId: user.id,
+          catalogoAsignaturaId,
+          grado: gradoNumero,
+          preguntas: preguntasActuales,
+        });
+      }
+    } catch (e) {
+      console.error("Banco: no se pudieron aportar las preguntas:", e);
+    }
+
     return NextResponse.json({ ok: true, estado: "aprobado" });
   }
 
   if (!instrucciones?.trim()) return NextResponse.json({ error: "Indica que deseas mejorar." }, { status: 400 });
+
+  // Regenerar usa IA: aqui si cuenta para el limite por hora.
+  const limite = await verificarLimiteIA(supabase, user.id);
+  if (!limite.permitido) {
+    return NextResponse.json({ error: limite.mensaje }, { status: 429 });
+  }
 
   const { data: asignacion } = await supabase
     .from("asignaciones_docente")
