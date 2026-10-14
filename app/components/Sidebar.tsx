@@ -37,6 +37,7 @@ const NAV_POR_ROL: Record<RolAula360, { href: string; label: string }[]> = {
     { href: "/superadmin", label: "Inicio" },
     { href: "/superadmin/instituciones", label: "Instituciones" },
     { href: "/superadmin/rectores", label: "Rectores" },
+    { href: "/superadmin/banco", label: "Banco de preguntas" },
   ],
 };
 
